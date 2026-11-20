@@ -4,8 +4,11 @@ const { readFile } = require('node:fs/promises');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 
-const group = { id: 'tito25-it', name: '2ПИЛОТ-25', subject: 'Информационные технологии', subjectCode: 'ИТ' };
-const otherCourse = { id: 'demo-first', name: '1ПИЛОТ-26', subject: 'Информатика', subjectCode: 'ИНФ' };
+const group = { id: 'tito25-it', name: '2ТиТО-25', subject: 'Информационные технологии', subjectCode: 'ИТ' };
+const otherCourse = { id: 'demo-first', name: '1ОП-26', subject: 'Информатика', subjectCode: 'ИНФ' };
+const otherGroups = ['1КСК-26', '1РЗ-26', '1ТЭС2-26', '1ЭС2-26', '2РЗ-25', '2ЭС2-25']
+  .map((name, i) => ({ id: 'other-' + i, name, subject: i < 4 ? 'Информатика' : 'Информационные технологии', subjectCode: i < 4 ? 'ИНФ' : 'ИТ' }));
+const appliedComputing = 'Прикладные компьютерные программы в профессиональной деятельности';
 const students = [
   { id: 's1', surname: 'Тестов', name: 'Иван', patronymic: 'Иванович', subgroup: '1' },
   { id: 's2', surname: 'Тестова', name: 'Анна', patronymic: '', subgroup: '2' }
@@ -33,7 +36,7 @@ const server = createServer(async (req, res) => {
       let data;
       switch (request.action) {
         case 'session': data = { email: 'pilot@example.test' }; break;
-        case 'groups': data = [group, otherCourse]; break;
+        case 'groups': data = [group, otherCourse, ...otherGroups]; break;
         case 'group':
           data = request.groupId === otherCourse.id
             ? { group: otherCourse, students: denseStudents, lessons: denseLessons, topics: [] }
@@ -53,7 +56,13 @@ const server = createServer(async (req, res) => {
           data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: '5', subject: 'Информационные технологии', room: '5' },
             { day: 2, pair: 1, week: 1, group: '8', subject: 'Информатика', room: '6' },
             { day: 1, pair: 2, week: 0, group: '9', subject: 'Другой предмет', room: '7' },
-            { day: 3, pair: 1, week: -1, group: '5', subject: 'Физика', room: '8' }] };
+            { day: 3, pair: 1, week: -1, group: '5', subject: 'Физика', room: '8' },
+            { day: 3, pair: 2, week: -1, group: '4', subject: 'Информатика', room: '8' },
+            { day: 4, pair: 2, week: 1, group: '7', subject: 'Информатика', room: '8' },
+            { day: 4, pair: 2, week: 0, group: '7', subject: appliedComputing, room: '8' },
+            { day: 5, pair: 1, week: 1, group: '8', subject: appliedComputing, room: '8' },
+            { day: 5, pair: 2, week: 1, group: '12', subject: 'Информатика', room: '8' },
+            { day: 6, pair: 2, week: 1, group: '2', subject: 'Информатика', room: '8' }] };
           break;
       }
       res.setHeader('Content-Type', 'application/json');
@@ -96,16 +105,18 @@ const server = createServer(async (req, res) => {
     const splitPair = page.locator('.schedule-pair').filter({ hasText: 'Другой предмет' });
     assert.equal(await splitPair.locator('.schedule-variant[data-week="0"]').getAttribute('data-inactive'), 'true');
     assert.deepEqual(await splitPair.locator('.schedule-variant').evaluateAll(variants => variants.map(node => node.dataset.week)), ['1', '0']);
-    assert.ok(await page.getByText('Группа 8', { exact: true }).isVisible());
+    for (const name of [group.name, otherCourse.name, ...otherGroups.map(item => item.name)]) {
+      assert.ok(await page.locator('.schedule-lesson').getByRole('button', { name, exact: true }).isVisible(), name);
+    }
     assert.ok(await page.locator('.schedule-lesson').filter({ hasText: 'Физика' }).getByText('Группа 5', { exact: true }).isVisible());
     assert.ok(await page.locator('.schedule-lesson').filter({ hasText: 'Информационные технологии' })
-      .getByRole('button', { name: '2ПИЛОТ-25', exact: true }).isVisible());
+      .getByRole('button', { name: '2ТиТО-25', exact: true }).isVisible());
     const firstCourse = page.locator('details[data-course="1"]');
     await firstCourse.locator('summary').press('Enter');
     assert.equal(await firstCourse.getAttribute('open'), '');
     assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
     await page.setViewportSize({ width: 1366, height: 768 });
-    await firstCourse.getByRole('button', { name: /1ПИЛОТ-26/ }).click();
+    await firstCourse.getByRole('button', { name: /1ОП-26/ }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('.matrix tbody tr').count(), 36);
     assert.equal(await page.locator('.grid-date').count(), 48);
@@ -139,10 +150,10 @@ const server = createServer(async (req, res) => {
     assert.deepEqual(lastCells, { lastDate: true, lastStudent: true });
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.getByRole('button', { name: 'Главная' }).click();
-    await page.locator('.schedule-lesson').getByRole('button', { name: '2ПИЛОТ-25' }).click();
+    await page.locator('.schedule-lesson').getByRole('button', { name: '2ТиТО-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('.matrix tbody tr').count(), 2);
-    assert.equal(await page.locator('#group-title').textContent(), 'Информационные технологии - 2ПИЛОТ-25');
+    assert.equal(await page.locator('#group-title').textContent(), 'Информационные технологии - 2ТиТО-25');
     const summaryGeometry = () => page.locator('#summary').evaluate(node => {
       const { x, y, width, height } = node.getBoundingClientRect();
       return { x, y, width, height };
@@ -210,7 +221,7 @@ const server = createServer(async (req, res) => {
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     await page.getByRole('button', { name: 'Готово' }).click();
     await page.reload();
-    await page.locator('.schedule-lesson').getByRole('button', { name: '2ПИЛОТ-25' }).click();
+    await page.locator('.schedule-lesson').getByRole('button', { name: '2ТиТО-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-dark.png' });
@@ -229,13 +240,33 @@ const server = createServer(async (req, res) => {
     await page.getByLabel('Название темы').fill('Тема после правки');
     await page.getByRole('button', { name: 'Сохранить' }).click();
     await page.getByRole('button', { name: 'Тема после правки' }).waitFor();
+    await page.getByRole('button', { name: 'Журнал', exact: true }).click();
+    await page.locator('.grid-head[data-lesson="existing-0"]').click();
+    const ivanMark = page.getByLabel('Отметка · Тестов Иван');
+    const ivanAttendance = page.getByRole('button', { name: 'Пропуск · Тестов Иван' });
+    assert.equal(await ivanMark.inputValue(), '5');
+    await ivanAttendance.click();
+    assert.equal(await ivanMark.inputValue(), 'н');
+    assert.equal(await ivanAttendance.textContent(), 'Н');
+    await ivanAttendance.click();
+    assert.equal(await ivanMark.inputValue(), '5');
+    const annaMark = page.getByLabel('Отметка · Тестова Анна');
+    await page.getByRole('button', { name: 'Пропуск · Тестова Анна' }).click();
+    assert.equal(await annaMark.inputValue(), '');
+    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await page.getByRole('button', { name: 'Вычитка' }).click();
     await page.getByRole('button', { name: '＋ Занятие' }).click();
     await page.getByLabel('Тема', { exact: true }).selectOption({ label: 'Тема после правки' });
     await page.getByLabel('Отметка · Тестов Иван').selectOption('4');
+    await page.getByRole('button', { name: 'Пропуск · Тестова Анна' }).click();
     await page.getByLabel('Комментарий · Тестов Иван').fill('Комментарий\nв две строки');
     await page.getByRole('button', { name: 'Сохранить' }).click();
     await page.getByText('Занятие сохранено.').waitFor();
     assert.equal(lessons.at(-1).marks.s1.note, 'Комментарий\nв две строки');
+    assert.equal(lessons.at(-1).marks.s2.value, 'н');
+    await page.getByRole('button', { name: 'Журнал', exact: true }).click();
+    assert.equal(await page.locator(`.grid-mark[data-lesson="${lessons.at(-1).id}"][data-student="s2"]`).textContent(), 'Н');
+    await page.getByRole('button', { name: 'Вычитка' }).click();
     await page.getByRole('button', { name: 'Тема после правки' }).click();
     await page.getByRole('button', { name: 'Удалить тему' }).click();
     await page.getByRole('button', { name: 'Удалить', exact: true }).click();

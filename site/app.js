@@ -289,10 +289,12 @@ function matrixBody(resetScroll = false) {
     <tbody>${students.map(({ student, rosterNumber }) => `<tr><th scope="row">${journalStudentLabel(student, rosterNumber)}</th>${lessons.map(lesson => {
       if (!applies(student, lesson.type)) return '<td class="grid-unavailable" aria-label="Другая подгруппа"></td>';
       const entry = mark(lesson, student);
-      const label = [shortStudentName(student), fullDate(lesson.date), entry.value || 'присутствовал'].join(', ');
+      const isAbsent = absent(entry.value);
+      const displayMark = isAbsent ? 'Н' : entry.value;
+      const label = [shortStudentName(student), fullDate(lesson.date), isAbsent ? 'отсутствовал' : entry.value || 'присутствовал'].join(', ');
       return `<td><button type="button" class="grid-mark" data-lesson="${html(lesson.id)}" data-student="${html(student.id)}"
-        data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" title="${html(entry.value || 'Поставить отметку')}"
-        aria-label="${html(label)}">${html(entry.value || '·')}</button></td>`;
+        data-mark="${html(isAbsent ? 'н' : entry.value)}" data-note="${Boolean(entry.note)}" title="${html(displayMark || 'Поставить отметку')}"
+        aria-label="${html(label)}">${html(displayMark || '·')}</button></td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
   const matrix = scroller.querySelector('.matrix');
   matrix.style.setProperty('--lesson-count', lessons.length);
@@ -303,7 +305,7 @@ function matrixBody(resetScroll = false) {
 function renderMatrix() {
   const dates = [...new Set(ordered(state.data.lessons).map(lesson => lesson.date.slice(0, 7)).filter(Boolean))].reverse();
   $('content').innerHTML = `<article class="panel journal-panel">
-    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· — присутствовал, н — пропуск</p></div>
+    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· — присутствовал, Н — пропуск</p></div>
     <div class="buttons">
     <select id="subgroup-filter" aria-label="Состав журнала">${subgroupViews.map(([value, label]) =>
       `<option value="${value}" ${value === state.subgroup ? 'selected' : ''}>${label}</option>`).join('')}</select>
@@ -553,6 +555,7 @@ function editLesson(existing, studentId) {
   const students = state.data.students;
   const initialType = existing?.type || 'Г';
   const drafts = new Map(students.map(student => [student.id, { ...(existing ? mark(existing, student) : { value: '', note: '' }) }]));
+  const gradesBeforeAbsence = new Map();
   let activeType = initialType;
   let topicId = existing?.topicId || '';
   const specialDate = existing?.date || today();
@@ -564,10 +567,15 @@ function editLesson(existing, studentId) {
   function refreshRoster() {
     $('lesson-roster').innerHTML = students.filter(student => applies(student, activeType)).map(student => {
       const current = drafts.get(student.id);
-      const values = [['', 'Присутствовал'], ['н', 'н · пропуск'], ...['2','3','4','5'].map(value => [value, value])];
-      if (!values.some(([value]) => value === current.value)) values.push([current.value, current.value]);
+      const values = [['', 'Присутствовал'], ['н', 'Н · пропуск'], ...['2','3','4','5'].map(value => [value, value])];
+      for (const value of [current.value, gradesBeforeAbsence.get(student.id)]) {
+        if (value && !values.some(([known]) => known === value)) values.push([value, value]);
+      }
       const name = shortStudentName(student);
+      const isAbsent = absent(current.value);
       return `<div class="editor-row" data-roster="${html(student.id)}">${journalStudentLabel(student)}
+        <button type="button" class="attendance-toggle" aria-label="${html('Пропуск · ' + name)}"
+          aria-pressed="${isAbsent}" title="${isAbsent ? 'Снять пропуск' : 'Поставить Н'}">${isAbsent ? 'Н' : '✓'}</button>
         <select class="mark-select" aria-label="${html('Отметка · ' + name)}">${values.map(([value, label]) =>
           `<option value="${html(value)}" ${value === current.value ? 'selected' : ''}>${html(label)}</option>`).join('')}</select>
         <textarea rows="1" aria-label="${html('Комментарий · ' + name)}" placeholder="Комментарий" maxlength="${Math.max(2000, current.note.length)}">${html(current.note)}</textarea>
@@ -588,7 +596,7 @@ function editLesson(existing, studentId) {
       <label class="field">Тип<select id="lesson-type">${typeSelect(initialType)}</select></label>
       <label class="field">Тема<select id="lesson-topic" aria-label="Тема"></select></label></div>
       <label class="field">Комментарий к занятию<textarea id="lesson-note" maxlength="${Math.max(5000, existing?.note.length || 0)}">${html(existing?.note)}</textarea></label>
-      <div><h3>Студенты</h3><p class="hint">Без оценки студент считается присутствовавшим.</p></div>
+      <div><h3>Студенты</h3><p class="hint">Нажмите галочку у студента, чтобы поставить Н. Повторное нажатие снимает пропуск.</p></div>
       <div id="lesson-roster" class="editor-roster"></div>`,
     (existing ? '<button id="lesson-delete" type="button" class="danger">Удалить занятие</button>' : '') +
       '<button class="primary">Сохранить</button>',
@@ -604,6 +612,36 @@ function editLesson(existing, studentId) {
     });
   refreshTopics();
   refreshRoster();
+  const roster = $('lesson-roster');
+
+  function updateAttendanceButton(button, isAbsent) {
+    button.setAttribute('aria-pressed', String(isAbsent));
+    button.title = isAbsent ? 'Снять пропуск' : 'Поставить Н';
+    button.textContent = isAbsent ? 'Н' : '✓';
+  }
+
+  roster.onclick = event => {
+    const button = event.target.closest('.attendance-toggle');
+    if (!button) return;
+    const row = button.closest('[data-roster]');
+    const studentId = row.dataset.roster;
+    const select = row.querySelector('select');
+    if (absent(select.value)) {
+      select.value = gradesBeforeAbsence.get(studentId) || '';
+      gradesBeforeAbsence.delete(studentId);
+    } else {
+      gradesBeforeAbsence.set(studentId, select.value);
+      select.value = 'н';
+    }
+    updateAttendanceButton(button, absent(select.value));
+  };
+  roster.onchange = event => {
+    if (!event.target.matches('.mark-select')) return;
+    const row = event.target.closest('[data-roster]');
+    gradesBeforeAbsence.delete(row.dataset.roster);
+    updateAttendanceButton(row.querySelector('.attendance-toggle'), absent(event.target.value));
+  };
+
   $('lesson-type').onchange = event => {
     captureRoster();
     topicId = $('lesson-topic').value;
@@ -630,14 +668,12 @@ const normalizeGroup = name => String(name || '').trim().toLocaleUpperCase('ru')
 
 function scheduleGroup(lesson) {
   const raw = String(lesson.group || '').trim();
-  const numeric = /^\d+$/.test(raw);
   const subject = String(lesson.subject || '').trim().toLocaleLowerCase('ru');
-  const alias = numeric ? cfg.scheduleGroupAliases?.[raw] : null;
-  const group = alias?.subjects.includes(subject)
-    ? state.groups.find(item => item.id === alias.groupId)
-    : state.groups.find(item => normalizeGroup(item.name) === normalizeGroup(raw));
+  const aliases = /^\d+$/.test(raw) ? cfg.scheduleGroupAliases?.[raw] : null;
+  const name = aliases && Object.hasOwn(aliases, subject) ? aliases[subject] : raw;
+  const group = state.groups.find(item => normalizeGroup(item.name) === normalizeGroup(name));
   if (group) return `<button type="button" class="link-btn" data-group="${html(group.id)}">${html(group.name)}</button>`;
-  const label = numeric ? 'Группа ' + raw : raw;
+  const label = /^\d+$/.test(name) ? 'Группа ' + name : name;
   return `<strong>${html(label || 'Группа не указана')}</strong>`;
 }
 
