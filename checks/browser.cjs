@@ -139,6 +139,18 @@ const server = createServer(async (req, res) => {
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('.matrix tbody tr').count(), 2);
     assert.equal(await page.locator('#group-title').textContent(), 'Информационные технологии - 2ПИЛОТ-25');
+    const summaryGeometry = () => page.locator('#summary').evaluate(node => {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+    const compactSummary = await summaryGeometry();
+    for (const label of ['Занятия', 'Вычитка', 'Аналитика', 'Журнал']) {
+      await page.locator('#tabs').getByRole('button', { name: label, exact: true }).click();
+      assert.deepEqual(await summaryGeometry(), compactSummary);
+    }
+    assert.ok(await page.locator('#matrix-scroll').evaluate(node =>
+      node.querySelector('.matrix').getBoundingClientRect().width >= node.clientWidth - 1));
+
     assert.equal(await page.locator('.grid-date').first().textContent(), '20.11');
     assert.equal(await page.locator('.grid-date').last().textContent(), '01.11');
     const firstStudent = page.locator('.matrix tbody th').first();
@@ -156,7 +168,7 @@ const server = createServer(async (req, res) => {
       typeBelow: node.nextElementSibling.getBoundingClientRect().top >= node.getBoundingClientRect().bottom
     }));
     assert.equal(style.writing, 'vertical-rl');
-    assert.ok(style.width <= 34 && style.typeBelow);
+    assert.ok(style.width > 32 && style.typeBelow);
     assert.equal(await page.locator('#courses .group-letter').count(), 0);
     assert.equal(await firstStudent.locator('.student-number').textContent(), '1');
     const colors = await page.locator('.grid-date').evaluateAll(nodes => Object.fromEntries(nodes.map(node =>
@@ -234,10 +246,39 @@ const server = createServer(async (req, res) => {
     await page.locator('#timeline-attendance').selectOption('month');
     assert.equal(await page.locator('#timeline-attendance').inputValue(), 'month');
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-charts.png' });
-    await page.getByRole('button', { name: 'Рулетка' }).click();
+    const rouletteButton = page.getByRole('button', { name: 'Рулетка' });
+    await rouletteButton.click();
+    await page.getByLabel('Кого включить').selectOption('');
+    assert.ok((await page.locator('.roulette-card strong').allTextContents()).includes('Тестова Анна'));
+    const transform = await page.locator('#roulette-track').evaluate(node => getComputedStyle(node).transform);
+    const spin = page.getByRole('button', { name: 'Запустить рулетку' });
+    await spin.click();
+    await page.getByText('Лента крутится…', { exact: true }).waitFor();
+    assert.ok(await spin.isDisabled());
+    assert.ok(await page.getByLabel('Кого включить').isDisabled());
+    await page.waitForFunction(initial => getComputedStyle(document.getElementById('roulette-track')).transform !== initial, transform);
+    if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-roulette.png' });
+    await page.locator('.roulette-card-selected').waitFor();
+    const winner = await page.locator('#roulette-result').textContent();
+    assert.ok(['Тестов Иван Иванович', 'Тестова Анна'].includes(winner));
+    assert.ok(winner.startsWith(await page.locator('.roulette-card-selected strong').textContent()));
+    assert.ok(await page.locator('.roulette-card-selected').evaluate(card => {
+      const center = node => {
+        const box = node.getBoundingClientRect();
+        return box.left + box.width / 2;
+      };
+      return Math.abs(center(card) - center(card.closest('.roulette-stage').querySelector('.roulette-pointer'))) <= 1;
+    }));
+    assert.ok(await spin.isEnabled());
+    await spin.click();
+    await page.getByText('Лента крутится…', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await rouletteButton.click();
     await page.getByLabel('Кого включить').selectOption('existing-0');
-    await page.getByRole('button', { name: 'Выбрать студента' }).click();
-    assert.equal(await page.locator('#roulette-result').textContent(), 'Тестов Иван Иванович');
+    await spin.click();
+    await page.locator('#roulette-result').filter({ hasText: /^Тестов Иван Иванович$/ }).waitFor();
+    assert.equal(await page.locator('#roulette-track').evaluate(node => node.getAnimations().length), 0);
     await page.getByRole('button', { name: 'Закрыть' }).click();
     const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Скачать CSV' }).click()]);
     assert.match(file.suggestedFilename(), /\.csv$/);
