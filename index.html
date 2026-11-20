@@ -7,9 +7,10 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="theme-color" content="#f5f6fa">
   <title>Электронный журнал</title>
-  <link rel="stylesheet" href="./styles.css?v=2">
+  <link rel="stylesheet" href="./styles.css?v=3">
   <script src="./config.js" defer></script>
-  <script src="./app.js?v=2" defer></script>
+  <script src="./vendor/chart.umd.js" defer></script>
+  <script src="./app.js?v=3" defer></script>
 </head>
 <body>
   <main id="auth" class="auth">
@@ -23,18 +24,15 @@
   </main>
   <div id="workspace" class="workspace" hidden>
     <aside class="sidebar">
-      <a class="brand" href="./"><span class="brand-icon" aria-hidden="true">Ж</span><strong>Электронный<br> журнал</strong></a>
+      <a id="brand-home" class="brand" href="./"><span class="brand-icon" aria-hidden="true">Ж</span><strong>Электронный<br> журнал</strong></a>
       <div class="side-inner">
+        <div class="groups home-menu"><button type="button" id="home" class="side-tool"><span aria-hidden="true">▦</span> Главная</button></div>
         <section class="course-menu" aria-label="Группы по курсам">
           <p class="side-label">Курсы</p>
-          <div id="courses" class="course-tabs" role="tablist" aria-label="Курсы"></div>
-          <div id="course-panel" role="tabpanel" hidden>
-            <nav id="groups" class="groups" aria-label="Группы выбранного курса"></nav>
-          </div>
+          <nav id="courses" class="course-tabs" aria-label="Курсы и группы"></nav>
         </section>
         <p class="side-label tools-label">Инструменты</p>
-        <div class="groups">
-          <button id="schedule" class="side-tool"><span aria-hidden="true">▦</span> Расписание</button>
+        <div class="groups tools-menu">
           <button id="roulette" class="side-tool" disabled><span aria-hidden="true">◎</span> Рулетка</button>
           <button id="settings" class="side-tool"><span aria-hidden="true">⚙︎</span> Настройки</button>
         </div>
