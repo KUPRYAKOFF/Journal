@@ -4,14 +4,15 @@ const { readFile } = require('node:fs/promises');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 
-const group = { id: 'demo', name: 'Пилот', subject: 'Информатика', subjectCode: 'ИНФ' };
+const group = { id: 'demo', name: '2ПИЛОТ-25', subject: 'Информационные технологии', subjectCode: 'ИТ' };
+const otherCourse = { id: 'demo-first', name: '1ПИЛОТ-26', subject: 'Информатика', subjectCode: 'ИНФ' };
 const students = [
-  { id: 's1', surname: 'Тестов', name: 'Иван', patronymic: '', subgroup: '1' },
+  { id: 's1', surname: 'Тестов', name: 'Иван', patronymic: 'Иванович', subgroup: '1' },
   { id: 's2', surname: 'Тестова', name: 'Анна', patronymic: '', subgroup: '2' }
 ];
 const topics = [];
 const lessons = Array.from({ length: 20 }, (_, index) => ({
-  id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: 'Г', topicId: '',
+  id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: index === 19 ? 'П1' : 'Г', topicId: '',
   note: '', marks: { s1: { value: '5', note: '' }, s2: { value: 'н', note: '' } }, position: index, version: 1
 }));
 const server = createServer(async (req, res) => {
@@ -27,8 +28,8 @@ const server = createServer(async (req, res) => {
       let data;
       switch (request.action) {
         case 'session': data = { email: 'pilot@example.test' }; break;
-        case 'groups': data = [group]; break;
-        case 'group': data = { group, students, lessons, topics }; break;
+        case 'groups': data = [group, otherCourse]; break;
+        case 'group': data = { group: request.groupId === otherCourse.id ? otherCourse : group, students, lessons, topics }; break;
         case 'saveTopic':
           if (row) Object.assign(row, { title: request.title, version: row.version + 1 });
           else topics.push({ id: request.newId, kind: request.kind, title: request.title, unmatchedDates: {}, version: 1 });
@@ -73,6 +74,49 @@ const server = createServer(async (req, res) => {
     await page.reload();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('.matrix tbody tr').count(), 2);
+    assert.equal(await page.locator('#group-title').textContent(), 'Информационные технологии - 2ПИЛОТ-25');
+    assert.equal(await page.getByRole('tab', { name: '2 курс' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('#groups button').count(), 1);
+    await page.getByRole('tab', { name: '2 курс' }).press('ArrowLeft');
+    await page.getByRole('heading', { name: 'Информатика - 1ПИЛОТ-26' }).waitFor();
+    assert.ok(await page.locator('#groups').getByRole('button', { name: /1ПИЛОТ-26/ }).isVisible());
+    assert.equal(await page.locator('#groups').getByRole('button', { name: /2ПИЛОТ-25/ }).count(), 0);
+    await page.getByRole('tab', { name: '2 курс' }).click();
+    await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
+    const firstStudent = page.locator('.matrix tbody th').first();
+    assert.equal(await firstStudent.locator('.student-name').textContent(), 'Тестов Иван');
+    assert.equal(await firstStudent.locator('.student-sub').textContent(), 'П1');
+    assert.ok(await firstStudent.evaluate(node => {
+      const name = node.querySelector('.student-name').getBoundingClientRect();
+      const subgroup = node.querySelector('.student-sub').getBoundingClientRect();
+      return name.right < subgroup.left && name.top < subgroup.bottom && subgroup.top < name.bottom;
+    }));
+    const date = page.locator('.grid-date').last();
+    const style = await date.evaluate(node => ({
+      width: node.closest('th').getBoundingClientRect().width,
+      writing: getComputedStyle(node).writingMode,
+      typeBelow: node.nextElementSibling.getBoundingClientRect().top >= node.getBoundingClientRect().bottom
+    }));
+    assert.equal(style.writing, 'vertical-rl');
+    assert.ok(style.width <= 34 && style.typeBelow);
+    const locked = page.locator('.grid-mark[disabled]').last();
+    assert.ok(await locked.isDisabled());
+    assert.equal(await locked.evaluate(node => getComputedStyle(node).cursor), 'not-allowed');
+    assert.match(await locked.evaluate(node => getComputedStyle(node).backgroundImage), /repeating-linear-gradient/);
+    const editable = page.locator('.grid-mark:not([disabled])').last();
+    assert.equal(await editable.evaluate(node => getComputedStyle(node).cursor), 'pointer');
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    assert.deepEqual(await page.locator('#settings-language option').allTextContents(), ['Русский']);
+    await page.locator('#settings-theme').selectOption('dark');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await page.getByRole('button', { name: 'Готово' }).click();
+    await page.reload();
+    await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-dark.png' });
+    await page.getByRole('button', { name: 'Настройки' }).click();
+    await page.locator('#settings-theme').selectOption('light');
+    await page.getByRole('button', { name: 'Готово' }).click();
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-desktop.png' });
     await page.getByRole('searchbox').fill('Анна');
     assert.equal(await page.locator('.matrix tbody tr').count(), 1);
@@ -104,7 +148,7 @@ const server = createServer(async (req, res) => {
     await page.getByRole('button', { name: 'Рулетка' }).click();
     await page.getByLabel('Кого включить').selectOption('existing-0');
     await page.getByRole('button', { name: 'Выбрать студента' }).click();
-    assert.equal(await page.locator('#roulette-result').textContent(), 'Тестов Иван');
+    assert.equal(await page.locator('#roulette-result').textContent(), 'Тестов Иван Иванович');
     await page.getByRole('button', { name: 'Закрыть' }).click();
     const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Скачать CSV' }).click()]);
     assert.match(file.suggestedFilename(), /\.csv$/);
@@ -116,9 +160,12 @@ const server = createServer(async (req, res) => {
         .map(node => [node.className || node.id, node.getBoundingClientRect().right, node.scrollWidth])
     }));
     assert.ok(widths.page <= widths.viewport, JSON.stringify(widths));
+    assert.ok(await page.locator('#group-title').evaluate(node =>
+      getComputedStyle(node).whiteSpace === 'nowrap' && node.scrollWidth <= node.clientWidth));
+    assert.ok(await page.locator('#matrix-scroll').evaluate(node => node.scrollWidth > node.clientWidth));
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-mobile.png' });
     assert.deepEqual(errors, []);
-    console.log('Chromium: входной экран, журнал, редакторы тем и занятий, расписание, рулетка, CSV, мобильная ширина.');
+    console.log('Chromium: вход, курсы, компактный журнал, настройки темы, редакторы, расписание, рулетка, CSV, мобильная ширина.');
   } finally {
     await browser.close();
     server.close();
