@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#0b0e14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Мобильный журнал — оценки</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="../config.js?v=3" defer></script>
+  <script src="../auth.js?v=1" defer></script>
+  <script src="./storage.js" defer></script>
+  <script src="./sync.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <div class="header-brand">
+        <div class="header-title">📗 Мобильный журнал</div>
+        <div class="header-sub">Оценки по студенту за все даты</div>
+      </div>
+      <button id="sync-btn" class="sync-btn" type="button" data-action="queue" hidden>Очередь</button>
+      <button id="theme-btn" class="icon-btn theme-btn" type="button" data-action="settings" aria-label="Настройки"><span aria-hidden="true">🎨</span></button>
+      <button id="refresh-btn" class="icon-btn" type="button" data-action="refresh" aria-label="Обновить" hidden>⟳</button>
+    </div>
+  </header>
+  <div id="storage-alert" class="storage-alert" role="status" hidden></div>
+  <main id="app" aria-label="Мобильный журнал"></main>
+  <div id="sendbar" hidden>
+    <div id="send-info" class="send-info"></div>
+    <button id="send-btn" type="button" data-action="send" disabled>Отправить в очередь</button>
+  </div>
+  <div id="toast" role="status"></div>
+  <dialog id="queue-panel" class="mobile-dialog" aria-labelledby="queue-title">
+    <div class="sync-panel-inner">
+      <div class="sync-panel-header">
+        <div id="queue-title" class="sync-panel-title">Очередь синхронизации</div>
+        <button type="button" data-action="close" class="icon-btn" aria-label="Закрыть очередь">✕</button>
+      </div>
+      <div id="queue-content"></div>
+      <input id="backup-import" type="file" accept="application/json,.json" hidden>
+    </div>
+  </dialog>
+  <dialog id="theme-panel" class="mobile-dialog" aria-labelledby="theme-title">
+    <div class="theme-panel-inner">
+      <div class="theme-panel-header">
+        <div class="theme-panel-title" id="theme-title">Настройки журнала</div>
+        <button type="button" data-action="close" class="icon-btn" aria-label="Закрыть настройки">✕</button>
+      </div>
+      <div class="theme-options" id="theme-options"></div>
+      <div class="sync-actions">
+        <button id="install-btn" type="button" class="sync-action" data-action="install">Установить приложение</button>
+        <a class="sync-action" href="../">Полный журнал</a>
+        <button id="logout-btn" type="button" class="sync-action" data-action="logout" hidden>Выйти</button>
+      </div>
+      <p id="mobile-account" class="sync-hint" hidden></p>
+      <p id="install-help" class="sync-hint" role="status" hidden></p>
+    </div>
+  </dialog>
+</body>
+</html>

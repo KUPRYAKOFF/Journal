@@ -69,7 +69,7 @@ const server = createServer(async (req, res) => {
       return res.end(JSON.stringify({ ok: true, data }));
     }
     const filename = path === '/' ? 'index.html' : path.slice(1);
-    if (!['index.html','app.js','styles.css','config.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
+    if (!['index.html','app.js','styles.css','config.js','auth.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
     res.setHeader('Content-Type', ({ html:'text/html', css:'text/css', js:'text/javascript' })[filename.split('.').pop()] + '; charset=UTF-8');
     const source = await readFile(join(__dirname, '../site', filename));
     res.end(filename === 'config.js'

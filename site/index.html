@@ -7,10 +7,11 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="theme-color" content="#f5f6fa">
   <title>Электронный журнал</title>
-  <link rel="stylesheet" href="./styles.css?v=7">
+  <link rel="stylesheet" href="./styles.css?v=8">
   <script src="./config.js?v=3" defer></script>
   <script src="./vendor/chart.umd.js" defer></script>
-  <script src="./app.js?v=8" defer></script>
+  <script src="./auth.js?v=1" defer></script>
+  <script src="./app.js?v=9" defer></script>
 </head>
 <body>
   <main id="auth" class="auth">
@@ -19,6 +20,7 @@
       <h1>Электронный журнал</h1>
       <p>Войдите через Google, чтобы открыть журнал преподавателя.</p>
       <button class="primary" id="sign-in">Войти через Google</button>
+      <p><a href="./mobile/">Мобильный журнал</a></p>
       <p id="auth-status" role="status" hidden></p>
     </section>
   </main>
@@ -33,6 +35,7 @@
         </section>
         <p class="side-label tools-label">Инструменты</p>
         <div class="groups tools-menu">
+          <a class="side-mobile" href="./mobile/">Мобильный журнал</a>
           <button id="roulette" class="side-tool" disabled><span aria-hidden="true">◎</span> Рулетка</button>
           <button id="settings" class="side-tool"><span aria-hidden="true">⚙︎</span> Настройки</button>
         </div>

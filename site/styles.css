@@ -1517,3 +1517,24 @@ dialog form {
     transition: none!important;
   }
 }
+
+.side-mobile {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.side-mobile:hover {
+  background: var(--row-hover);
+}
+
+.auth-card a {
+  color: var(--blue);
+}

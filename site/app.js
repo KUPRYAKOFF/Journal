@@ -38,52 +38,21 @@ function message(node, text = '', error = false) {
 }
 
 async function api(action, fields = {}) {
-  if (!cfg.apiUrl) throw new Error('Для подключения укажите адрес Web App в config.js.');
-  let response, result;
   try {
-    response = await fetch(cfg.apiUrl, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ action, token: state.token, ...fields }),
-      credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(30000)
-    });
-    result = await response.json();
-  } catch {
-    throw new Error('Связь с сервером журнала прервалась. Проверьте соединение и повторите попытку.');
-  }
-  if (!response.ok || !result.ok) {
-    const error = new Error(result.message || 'Сервер не смог выполнить запрос.');
-    error.code = result.code;
+    return await JournalAuth.request(action, fields, state.token);
+  } catch (error) {
     if (state.token && ['AUTH', 'FORBIDDEN'].includes(error.code)) showSignIn(error.message);
     throw error;
   }
-  return result.data;
-}
-
-function base64(bytes) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function signIn() {
-  if (!cfg.googleClientId || !cfg.redirectUri || !cfg.apiUrl) {
-    message($('auth-status'), 'Подключение к Google ещё не настроено. Заполните config.js.', true);
-    return;
-  }
   $('sign-in').disabled = true;
   try {
-    const verifier = base64(crypto.getRandomValues(new Uint8Array(32)));
-    const nonce = base64(crypto.getRandomValues(new Uint8Array(24)));
-    const challenge = base64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-    sessionStorage.setItem('journal.oauth', JSON.stringify({ nonce, verifier, created: Date.now() }));
-    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.search = new URLSearchParams({
-      client_id: cfg.googleClientId, redirect_uri: cfg.redirectUri, response_type: 'code',
-      scope: 'openid email', state: nonce, code_challenge: challenge,
-      code_challenge_method: 'S256', prompt: 'select_account'
-    });
-    location.assign(url);
-  } catch {
+    await JournalAuth.signIn();
+  } catch (error) {
     $('sign-in').disabled = false;
-    message($('auth-status'), 'Не удалось начать вход. Проверьте настройки браузера.', true);
+    message($('auth-status'), error.message || 'Не удалось начать вход. Проверьте настройки браузера.', true);
   }
 }
 
@@ -93,7 +62,7 @@ function showSignIn(error = '') {
   state.selected = '';
   state.data = null;
   state.request++;
-  sessionStorage.removeItem('journal.session');
+  JournalAuth.clear();
   $('workspace').hidden = true;
   clearContent();
   state.openCourses.clear();
@@ -120,22 +89,19 @@ async function openWorkspace(account) {
 }
 
 async function init() {
-  const params = new URLSearchParams(location.search);
-  if (params.has('code') || params.has('error')) {
-    history.replaceState(null, '', location.pathname);
-    const pending = JSON.parse(sessionStorage.getItem('journal.oauth') || 'null');
-    sessionStorage.removeItem('journal.oauth');
-    if (!pending || pending.nonce !== params.get('state') || (Date.now() - pending.created) > 600000 || params.has('error')) {
-      return showSignIn('Вход отменён или истёк. Начните заново.');
-    }
+  if (JournalAuth.hasCallback()) {
     $('sign-in').disabled = true;
     message($('auth-status'), 'Проверяем доступ…');
-    const account = await api('login', { code: params.get('code'), verifier: pending.verifier });
+    const { account, target } = await JournalAuth.finishSignIn();
+    if (target === 'mobile') {
+      location.replace(new URL('mobile/', cfg.redirectUri));
+      return;
+    }
     state.token = account.token;
-    sessionStorage.setItem('journal.session', state.token);
-    return openWorkspace(account);
+    await openWorkspace(account);
+    return;
   }
-  state.token = sessionStorage.getItem('journal.session') || '';
+  state.token = JournalAuth.token();
   if (state.token) {
     $('sign-in').disabled = true;
     message($('auth-status'), 'Проверяем доступ…');
