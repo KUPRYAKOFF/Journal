@@ -4,7 +4,7 @@ const { readFile } = require('node:fs/promises');
 const { join } = require('node:path');
 const { chromium } = require('playwright');
 
-const group = { id: 'demo', name: '2ПИЛОТ-25', subject: 'Информационные технологии', subjectCode: 'ИТ' };
+const group = { id: 'tito25-it', name: '2ПИЛОТ-25', subject: 'Информационные технологии', subjectCode: 'ИТ' };
 const otherCourse = { id: 'demo-first', name: '1ПИЛОТ-26', subject: 'Информатика', subjectCode: 'ИНФ' };
 const students = [
   { id: 's1', surname: 'Тестов', name: 'Иван', patronymic: 'Иванович', subgroup: '1' },
@@ -50,9 +50,10 @@ const server = createServer(async (req, res) => {
           break;
         }
         case 'schedule':
-          data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: '2пилот-25', subject: 'Информатика', room: '5' },
+          data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: '5', subject: 'Информационные технологии', room: '5' },
             { day: 2, pair: 1, week: 1, group: '8', subject: 'Информатика', room: '6' },
-            { day: 1, pair: 2, week: 0, group: '9', subject: 'Другой предмет', room: '7' }] };
+            { day: 1, pair: 2, week: 0, group: '9', subject: 'Другой предмет', room: '7' },
+            { day: 3, pair: 1, week: -1, group: '5', subject: 'Физика', room: '8' }] };
           break;
       }
       res.setHeader('Content-Type', 'application/json');
@@ -61,10 +62,10 @@ const server = createServer(async (req, res) => {
     const filename = path === '/' ? 'index.html' : path.slice(1);
     if (!['index.html','app.js','styles.css','config.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
     res.setHeader('Content-Type', ({ html:'text/html', css:'text/css', js:'text/javascript' })[filename.split('.').pop()] + '; charset=UTF-8');
-    const source = filename === 'config.js'
-      ? 'window.JOURNAL_CONFIG={apiUrl:"/api",timeZone:"Asia/Irkutsk"};'
-      : await readFile(join(__dirname, '../site', filename));
-    res.end(source);
+    const source = await readFile(join(__dirname, '../site', filename));
+    res.end(filename === 'config.js'
+      ? source + '\nwindow.JOURNAL_CONFIG = { ...window.JOURNAL_CONFIG, apiUrl: "/api" };'
+      : source);
   } catch (error) {
     res.writeHead(500).end(String(error));
   }
@@ -96,6 +97,9 @@ const server = createServer(async (req, res) => {
     assert.equal(await splitPair.locator('.schedule-variant[data-week="0"]').getAttribute('data-inactive'), 'true');
     assert.deepEqual(await splitPair.locator('.schedule-variant').evaluateAll(variants => variants.map(node => node.dataset.week)), ['1', '0']);
     assert.ok(await page.getByText('Группа 8', { exact: true }).isVisible());
+    assert.ok(await page.locator('.schedule-lesson').filter({ hasText: 'Физика' }).getByText('Группа 5', { exact: true }).isVisible());
+    assert.ok(await page.locator('.schedule-lesson').filter({ hasText: 'Информационные технологии' })
+      .getByRole('button', { name: '2ПИЛОТ-25', exact: true }).isVisible());
     const firstCourse = page.locator('details[data-course="1"]');
     await firstCourse.locator('summary').press('Enter');
     assert.equal(await firstCourse.getAttribute('open'), '');
