@@ -715,24 +715,106 @@ function openRoulette() {
   openDialog('Рулетка', `<label class="field">Кого включить<select id="roulette-lesson">
     <option value="">Вся группа</option>${options.map(lesson => `<option value="${html(lesson.id)}" ${lesson === current ? 'selected' : ''}>
       ${fullDate(lesson.date)} · ${html(typeCodes[lesson.type] || lesson.type)}${lesson.topicId ? ' · ' + html(topicName(lesson.topicId)) : ''}</option>`).join('')}</select></label>
-    <p id="roulette-count" class="hint"></p><p id="roulette-result" class="roulette-result" aria-live="polite">Кого вызовем?</p>`,
-    '<button class="primary" id="spin">Выбрать студента</button>', () => {
-      const pool = candidates();
-      if (!pool.length) return;
-      const index = Math.floor(Math.random() * pool.length);
-      $('roulette-result').textContent = studentName(pool[index]);
-    });
-  const candidates = () => {
-    const lesson = options.find(item => item.id === $('roulette-lesson').value);
+    <p id="roulette-count" class="hint"></p>
+    <div class="roulette-stage" aria-hidden="true" hidden>
+      <div id="roulette-track" class="roulette-track"></div>
+      <span class="roulette-pointer"></span>
+    </div>
+    <p id="roulette-result" class="roulette-result" role="status"></p>`,
+    '<button type="submit" class="primary" id="spin">Запустить рулетку</button>', spin);
+
+  const selector = $('roulette-lesson');
+  const result = $('roulette-result');
+  const button = $('spin');
+  const track = $('roulette-track');
+  const stage = track.parentElement;
+  const startIndex = 4;
+  let centered = null;
+  let running = null;
+
+  function candidates() {
+    const lesson = options.find(item => item.id === selector.value);
     return lesson ? students.filter(student => applies(student, lesson.type) && !absent(mark(lesson, student).value)) : students;
-  };
-  const refresh = () => {
+  }
+
+  function renderCards(strip) {
+    track.innerHTML = strip.map(student => {
+      const initials = [student.surname, student.name].map(part => part?.charAt(0)).filter(Boolean).join('');
+      const subgroup = ['1', '2'].includes(student.subgroup) ? 'П' + student.subgroup : '';
+      return `<div class="roulette-card" data-subgroup="${subgroup}">
+        <span class="roulette-initials">${html(initials)}</span>
+        <strong>${html(shortStudentName(student))}</strong>
+        ${subgroup ? `<small>${subgroup}</small>` : ''}
+      </div>`;
+    }).join('');
+    stage.hidden = !strip.length;
+    stage.dataset.landed = 'false';
+  }
+
+  function position(index) {
+    const card = track.children[index];
+    return `translateX(-${card.offsetLeft + card.offsetWidth / 2}px)`;
+  }
+
+  function refresh() {
     const pool = candidates();
-    $('roulette-count').textContent = ( $('roulette-lesson').value ? 'Присутствующих: ' : 'Студентов: ') + pool.length;
-    $('roulette-result').textContent = pool.length ? 'Кого вызовем?' : 'Нет кандидатов';
-    $('spin').disabled = !pool.length;
-  };
-  $('roulette-lesson').onchange = refresh;
+    $('roulette-count').textContent = (selector.value ? 'Присутствующих: ' : 'Студентов: ') + pool.length;
+    result.textContent = pool.length ? 'Кого вызовем?' : 'Нет кандидатов';
+    button.disabled = !pool.length;
+    const strip = pool.length ? Array.from({ length: 9 }, (_, index) => pool[index % pool.length]) : [];
+    centered = strip[startIndex] || null;
+    renderCards(strip);
+    if (centered) track.style.transform = position(startIndex);
+  }
+
+  async function spin() {
+    if (running) return;
+    const pool = candidates();
+    if (!pool.length) return;
+    const pick = () => pool[Math.floor(Math.random() * pool.length)];
+    const winner = pick();
+    const landingIndex = 40 + Math.floor(Math.random() * 6);
+    const strip = Array.from({ length: landingIndex + 7 }, pick);
+    strip[startIndex] = centered || pick();
+    strip[landingIndex] = winner;
+    renderCards(strip);
+    const from = position(startIndex);
+    const to = position(landingIndex);
+    track.style.transform = from;
+
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reducedMotion) {
+      selector.disabled = button.disabled = true;
+      result.textContent = 'Лента крутится…';
+      const animation = track.animate([{ transform: from }, { transform: to }], {
+        duration: 5200, easing: 'cubic-bezier(.15, .63, .11, 1)', fill: 'forwards'
+      });
+      running = animation;
+      try {
+        await animation.finished;
+      } catch (error) {
+        if (error.name !== 'AbortError') throw error;
+        return;
+      } finally {
+        running = null;
+        selector.disabled = button.disabled = false;
+      }
+      track.style.transform = to;
+      animation.cancel();
+      if (!dialog.open || !track.isConnected) return;
+      button.focus();
+    } else {
+      track.style.transform = to;
+    }
+
+    centered = winner;
+    stage.dataset.landed = 'true';
+    track.children[landingIndex].classList.add('roulette-card-selected');
+    result.textContent = studentName(winner);
+  }
+
+  dialog.addEventListener('close', () => running?.cancel(), { once: true });
+  selector.onchange = refresh;
   refresh();
 }
 

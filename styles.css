@@ -595,6 +595,7 @@ input::placeholder, textarea::placeholder {
 
 .matrix {
   width: max-content;
+  min-width: 100%;
 }
 
 .matrix td,.matrix th {
@@ -950,6 +951,128 @@ dialog form {
   font-size: 13px;
 }
 
+.roulette-stage {
+  position: relative;
+  overflow: hidden;
+  height: 142px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--paper);
+}
+
+.roulette-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--paper), transparent 17%, transparent 83%, var(--paper));
+}
+
+.roulette-track {
+  position: absolute;
+  inset-block: 13px;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  width: max-content;
+}
+
+.roulette-card {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 5px;
+  width: 134px;
+  min-width: 134px;
+  padding: 6px;
+  border: 1px solid var(--field-border);
+  border-radius: 9px;
+  background: var(--surface);
+  text-align: center;
+  color: var(--ink);
+}
+
+.roulette-card[data-subgroup="1"] {
+  border-bottom: 3px solid var(--date-p1-ink);
+}
+
+.roulette-card[data-subgroup="2"] {
+  border-bottom: 3px solid var(--date-p2-ink);
+}
+
+.roulette-card-selected {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  background: var(--tint);
+}
+
+.roulette-initials {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  color: var(--blue-dark);
+  background: var(--neutral-bg);
+  font-weight: 750;
+}
+
+.roulette-card strong {
+  font-size: 13px;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.roulette-card small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.roulette-pointer {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--blue);
+  pointer-events: none;
+}
+
+.roulette-pointer::before,
+.roulette-pointer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--blue);
+}
+
+.roulette-pointer::before {
+  top: -6px;
+}
+
+.roulette-pointer::after {
+  bottom: -6px;
+}
+
+.roulette-stage[data-landed="true"] .roulette-pointer {
+  background: transparent;
+}
+
+.roulette-result {
+  min-height: 24px;
+  margin: 0;
+  color: var(--blue-dark);
+  font-size: 16px;
+  font-weight: 750;
+  text-align: center;
+}
+
 .schedule-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1092,24 +1215,21 @@ dialog form {
   font-size: 11px;
 }
 
-@media(min-width:801px) and (min-height:520px) {
-  .main-content:has(.journal-panel) {
-    height: 100dvh;
-    padding-block: 8px 6px;
-    display: flex;
-    flex-direction: column;
+@media(min-width:801px) {
+  :root {
+    scrollbar-gutter: stable;
   }
 
-  .main-content:has(.journal-panel) > :not(#content) {
-    flex-shrink: 0;
+  .main-content {
+    padding-top: 8px;
   }
 
-  .main-content:has(.journal-panel) .group-header button {
+  .group-header button {
     min-height: 31px;
     padding-block: 4px;
   }
 
-  .main-content:has(.journal-panel) .metric {
+  .metric {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -1117,12 +1237,26 @@ dialog form {
     padding-block: 4px;
   }
 
-  .main-content:has(.journal-panel) .metric strong {
+  .metric strong {
     font-size: 17px;
   }
 
-  .main-content:has(.journal-panel) .tabs button {
+  .tabs button {
     padding-block: 5px;
+  }
+
+}
+
+@media(min-width:801px) and (min-height:520px) {
+  .main-content:has(.journal-panel) {
+    height: 100dvh;
+    padding-bottom: 6px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .main-content:has(.journal-panel) > :not(#content) {
+    flex-shrink: 0;
   }
 
   .journal-panel .toolbar {
@@ -1147,19 +1281,17 @@ dialog form {
 
   #matrix-scroll {
     --student-width: 164px;
-    --max-lesson-width: 32px;
     --max-row-height: 29px;
     --visible-lessons: 35;
     --visible-students: 33;
     container-type: size;
     flex: 1;
-    max-width: calc(var(--student-width) + var(--visible-lessons) * var(--max-lesson-width));
     max-height: calc(57px + var(--visible-students) * var(--max-row-height));
     min-height: 0;
   }
 
   .matrix {
-    --lesson-width: clamp(16px, calc((100cqw - var(--student-width) - 2px) / min(var(--lesson-count, 1), var(--visible-lessons))), var(--max-lesson-width));
+    --lesson-width: max(16px, calc((100cqw - var(--student-width) - 2px) / min(var(--lesson-count, 1), var(--visible-lessons))));
     --row-height: clamp(15px, calc((100cqh - 57px) / min(var(--student-count, 1), var(--visible-students))), var(--max-row-height));
     width: calc(var(--student-width) + var(--lesson-width) * var(--lesson-count, 1));
     table-layout: fixed;
