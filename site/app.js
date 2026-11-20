@@ -9,6 +9,7 @@ const state = {
 const types = { 'Г': 'Лекция', 'П1': 'Подгруппа 1', 'П2': 'Подгруппа 2', 'ИН': 'Иное' };
 const typeCodes = { 'Г': 'Л', 'П1': 'П1', 'П2': 'П2', 'ИН': 'Ин' };
 const subgroupViews = [['', 'Группа'], ['1', 'Первая подгруппа'], ['2', 'Вторая подгруппа']];
+const matchesSubgroupLesson = (subgroup, type) => !subgroup || type === 'П' + subgroup;
 const $ = id => document.getElementById(id);
 const form = $('dialog-form');
 const dialog = $('dialog');
@@ -251,7 +252,7 @@ function typePill(value) {
 }
 function typeSelect(selected = '', all = false, subgroup = '') {
   return (all ? '<option value="">Все типы</option>' : '') + Object.entries(types)
-    .filter(([key]) => !subgroup || applies({ subgroup }, key))
+    .filter(([key]) => matchesSubgroupLesson(subgroup, key))
     .map(([key, name]) => `<option value="${key}" ${key === selected ? 'selected' : ''}>${name}</option>`).join('');
 }
 function journalStudentLabel(student, rosterNumber) {
@@ -271,11 +272,11 @@ function matrixBody(resetScroll = false) {
   const students = state.data.students.map((student, index) => ({ student, rosterNumber: index + 1 }))
     .filter(({ student }) => (!subgroup || student.subgroup === subgroup) && studentName(student).toLocaleLowerCase('ru').includes(query));
   const lessons = state.data.lessons.filter(lesson =>
-    (!subgroup || applies({ subgroup }, lesson.type)) &&
+    matchesSubgroupLesson(subgroup, lesson.type) &&
     (!state.type || lesson.type === state.type) && (!state.period || lesson.date.startsWith(state.period)))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.position - a.position);
   if (!lessons.length || !students.length) {
-    scroller.innerHTML = `<p class="empty">${!lessons.length ? 'Нет занятий за выбранный период.' : 'Студенты не найдены.'}</p>`;
+    scroller.innerHTML = `<p class="empty">${!lessons.length ? 'Нет занятий по выбранным фильтрам.' : 'Студенты не найдены.'}</p>`;
     return;
   }
   scroller.innerHTML = `<table class="matrix"><thead><tr><th scope="col">Студент</th>${lessons.map(lesson => {
@@ -310,7 +311,7 @@ function renderMatrix() {
     <select id="period-filter" aria-label="Месяц"><option value="">Все месяцы</option>${dates.map(iso => 
       `<option value="${html(iso)}" ${iso === state.period ? 'selected' : ''}>${months[Number(iso.slice(5)) - 1]} ${iso.slice(0, 4)}</option>`).join('')}</select>
     <select id="type-filter" aria-label="Тип занятия">${typeSelect(state.type, true, state.subgroup)}</select></div></div>
-    <div id="matrix-scroll" class="table-scroll"></div></article>`;
+    <div id="matrix-scroll" class="table-scroll" tabindex="0" role="region" aria-label="Таблица оценок"></div></article>`;
   matrixBody(true);
 }
 
@@ -461,7 +462,7 @@ function applyPreferences() {
   const root = document.documentElement;
   root.dataset.theme = preferences.theme;
   root.lang = preferences.language;
-  document.querySelector('meta[name="theme-color"]').content = preferences.theme === 'dark' ? '#131925' : '#f5f6fa';
+  document.querySelector('meta[name="theme-color"]').content = getComputedStyle(root).getPropertyValue('--paper').trim();
   if (state.data && state.tab === 'analytics') renderTab();
 }
 
@@ -635,6 +636,59 @@ function scheduleGroup(name) {
   return `<strong>${html(label || 'Группа не указана')}</strong>`;
 }
 
+const scheduleDateFormat = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC'
+});
+
+function renderSchedulePair(lessons, pair, time, currentWeek) {
+  const rooms = [...new Set(lessons.map(lesson => String(lesson.room || '').trim()).filter(Boolean))];
+  const variant = (matches, week) => `<div class="schedule-variant"
+    ${week === null ? '' : `data-week="${week}" role="group" aria-label="${week ? 'Нечётная неделя' : 'Чётная неделя'}"`}
+    ${matches.length ? '' : 'aria-hidden="true"'}
+    ${week !== null && currentWeek !== null && week !== currentWeek ? 'data-inactive="true"' : ''}>
+    ${matches.map(lesson => `<div class="schedule-lesson">${scheduleGroup(lesson.group)}
+      <span title="${html(lesson.subject)}">${html(lesson.subject || 'Занятие')}</span></div>`).join('')}</div>`;
+  const shared = lessons.filter(lesson => ![0, 1].includes(lesson.week));
+  const alternating = [1, 0].map(week => lessons.filter(lesson => lesson.week === week));
+  const variants = (shared.length ? variant(shared, null) : '') + (alternating.some(items => items.length)
+    ? alternating.map((items, index) => variant(items, 1 - index)).join('') : '');
+  const roomText = rooms.length ? 'Каб. ' + rooms.join(', ') : '—';
+  return `<div class="schedule-pair${lessons.length ? '' : ' schedule-pair-empty'}">
+    <div class="schedule-time"><strong>${pair} пара</strong><small>${time}</small></div>
+    <div class="schedule-variants">${variants || '<span class="schedule-no-lesson">Нет занятий</span>'}</div>
+    <div class="schedule-room" title="${html(roomText)}">${html(roomText)}</div>
+  </div>`;
+}
+
+function renderSchedule(data) {
+  const currentWeek = data.parity === 'нечетная' ? 1 : data.parity === 'четная' ? 0 : null;
+  const date = new Date(today() + 'T00:00:00Z');
+  const weekday = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() - (weekday + 6) % 7);
+  const days = weekdayNames.map((day, index) => {
+    const dayNumber = index + 1;
+    const dateLabel = scheduleDateFormat.format(date);
+    const isoDate = date.toISOString().slice(0, 10);
+    date.setUTCDate(date.getUTCDate() + 1);
+    const times = specialTimes[dayNumber] || baseTimes;
+    const pairs = times.map((time, i) => {
+      const pair = i + 1;
+      return renderSchedulePair(data.items.filter(item => item.day === dayNumber && item.pair === pair), pair, time, currentWeek);
+    }).join('');
+    return `<section class="schedule-day" ${weekday === dayNumber ? 'data-today="true"' : ''}>
+      <h3>${day} <time datetime="${isoDate}">${html(dateLabel)}</time></h3><div class="schedule-pairs">${pairs}</div>
+    </section>`;
+  });
+  const weekBadge = (name, week) => `<span ${currentWeek === week ? 'aria-current="true"' : ''}>${name}</span>`;
+  $('content').innerHTML = `<article class="panel home-schedule">
+    <div class="toolbar"><h2>Расписание</h2><div class="schedule-week" aria-label="Текущая неделя">
+      ${weekBadge('Нечётная', 1)}${weekBadge('Чётная', 0)}</div></div>
+    <div class="schedule-grid">
+      <div class="schedule-column">${days.slice(0, 3).join('')}</div>
+      <div class="schedule-column">${days.slice(3).join('')}</div>
+    </div></article>`;
+}
+
 async function openHome() {
   const request = ++state.request;
   state.selected = '';
@@ -646,29 +700,7 @@ async function openHome() {
   $('content').innerHTML = '<article class="panel"><p class="empty" role="status">Загружаем расписание…</p></article>';
   try {
     const data = await api('schedule');
-    if (state.request !== request) return;
-    $('content').innerHTML = `<article class="panel home-schedule">
-      <div class="toolbar"><h2>Расписание</h2><label class="schedule-filter">Неделя <select id="schedule-week">
-        <option value="all">Все недели</option><option value="1">Нечётная</option><option value="0">Чётная</option>
-      </select></label></div><div id="schedule-grid" class="schedule-grid"></div></article>`;
-    const selector = $('schedule-week');
-    selector.value = data.parity === 'нечетная' ? '1' : data.parity === 'четная' ? '0' : 'all';
-    const weekday = new Date(today() + 'T00:00:00Z').getUTCDay();
-    const render = () => {
-      $('schedule-grid').innerHTML = weekdayNames.map((day, index) => {
-        const dayNumber = index + 1;
-        const items = data.items.filter(item => item.day === dayNumber &&
-          (selector.value === 'all' || ![0, 1].includes(item.week) || String(item.week) === selector.value)).sort((a, b) => a.pair - b.pair);
-        const times = specialTimes[dayNumber] || baseTimes;
-        return `<section class="schedule-day" ${weekday === dayNumber ? 'data-today="true"' : ''}><h3>${day}</h3>${items.map(item =>
-          `<div class="schedule-line"><small>${item.pair} пара · ${times[item.pair - 1]}</small>
-          <div class="schedule-lesson">${scheduleGroup(item.group)}<span>${html(item.subject || 'Занятие')}</span></div>
-          <small>${html([item.room ? 'Каб. ' + item.room : '', item.week === 1 ? 'Нечётная' : item.week === 0 ? 'Чётная' : 'Каждую неделю'].filter(Boolean).join(' · '))}</small></div>`).join('')
-          || '<p class="hint">Нет занятий</p>'}</section>`;
-      }).join('');
-    };
-    selector.onchange = render;
-    render();
+    if (state.request === request) renderSchedule(data);
   } catch (error) {
     if (state.request !== request) return;
     $('content').innerHTML = '<article class="panel"><p class="empty" role="status"></p></article>';
@@ -805,7 +837,7 @@ $('content').addEventListener('change', event => {
   else if (event.target.id === 'type-filter') state.type = event.target.value;
   else if (event.target.id === 'subgroup-filter') {
     state.subgroup = event.target.value;
-    if (!applies({ subgroup: state.subgroup }, state.type)) state.type = '';
+    if (state.type && !matchesSubgroupLesson(state.subgroup, state.type)) state.type = '';
     $('type-filter').innerHTML = typeSelect(state.type, true, state.subgroup);
   } else return;
   matrixBody(true);

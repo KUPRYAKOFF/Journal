@@ -15,7 +15,7 @@ const lessons = Array.from({ length: 20 }, (_, index) => ({
   id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: ['ИН', 'П2', 'П1'][index - 17] || 'Г', topicId: '',
   note: '', marks: { s1: { value: '5', note: '' }, s2: { value: 'н', note: '' } }, position: index, version: 1
 }));
-const denseStudents = Array.from({ length: 33 }, (_, index) => ({ id: 'dense-' + index, surname: 'Тестов', name: 'Иван', subgroup: '1' }));
+const denseStudents = Array.from({ length: 36 }, (_, index) => ({ id: 'dense-' + index, surname: 'Тестов', name: 'Иван', subgroup: '1' }));
 const denseLessons = Array.from({ length: 48 }, (_, index) => ({
   ...lessons[index % lessons.length], id: 'dense-' + index, position: index,
   date: new Date(Date.UTC(2026, 9, index + 1)).toISOString().slice(0, 10)
@@ -51,7 +51,8 @@ const server = createServer(async (req, res) => {
         }
         case 'schedule':
           data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: '2пилот-25', subject: 'Информатика', room: '5' },
-            { day: 2, pair: 1, week: 1, group: '8', subject: 'Информатика', room: '6' }] };
+            { day: 2, pair: 1, week: 1, group: '8', subject: 'Информатика', room: '6' },
+            { day: 1, pair: 2, week: 0, group: '9', subject: 'Другой предмет', room: '7' }] };
           break;
       }
       res.setHeader('Content-Type', 'application/json');
@@ -84,7 +85,16 @@ const server = createServer(async (req, res) => {
     await page.reload();
     await page.getByRole('heading', { name: 'Расписание' }).waitFor();
     assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
-    assert.ok(await page.getByText('Каб. 5', { exact: false }).isVisible());
+    assert.ok(await page.getByText('Каб. 5, 7', { exact: true }).isVisible());
+    assert.equal(await page.locator('.schedule-week [aria-current]').textContent(), 'Нечётная');
+    assert.deepEqual(await page.locator('.schedule-column').evaluateAll(columns =>
+      columns.map(column => [...column.querySelectorAll('h3')].map(title => title.firstChild.textContent.trim()))),
+      [['Понедельник', 'Вторник', 'Среда'], ['Четверг', 'Пятница', 'Суббота']]);
+    assert.equal(await page.locator('.schedule-pair').count(), 24);
+    if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-schedule.png' });
+    const splitPair = page.locator('.schedule-pair').filter({ hasText: 'Другой предмет' });
+    assert.equal(await splitPair.locator('.schedule-variant[data-week="0"]').getAttribute('data-inactive'), 'true');
+    assert.deepEqual(await splitPair.locator('.schedule-variant').evaluateAll(variants => variants.map(node => node.dataset.week)), ['1', '0']);
     assert.ok(await page.getByText('Группа 8', { exact: true }).isVisible());
     const firstCourse = page.locator('details[data-course="1"]');
     await firstCourse.locator('summary').press('Enter');
@@ -93,15 +103,37 @@ const server = createServer(async (req, res) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await firstCourse.getByRole('button', { name: /1ПИЛОТ-26/ }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
-    assert.equal(await page.locator('.matrix tbody tr').count(), 33);
+    assert.equal(await page.locator('.matrix tbody tr').count(), 36);
     assert.equal(await page.locator('.grid-date').count(), 48);
-    const matrix = await page.locator('#matrix-scroll').evaluate(node => ({
-      sw: node.scrollWidth, cw: node.clientWidth, sh: node.scrollHeight, ch: node.clientHeight,
-      bottom: node.getBoundingClientRect().bottom, viewport: innerHeight,
-      components: [...document.querySelectorAll('.main-content, .group-header, .summary, .tabs, .banner, .journal-panel .toolbar')]
-        .map(el => [el.className, el.getBoundingClientRect().top, el.getBoundingClientRect().height])
-    }));
-    assert.ok(matrix.sw <= matrix.cw && matrix.sh <= matrix.ch && matrix.bottom <= matrix.viewport, JSON.stringify(matrix));
+    const visibleGrid = () => page.locator('#matrix-scroll').evaluate(node => {
+      const viewport = node.getBoundingClientRect();
+      const fullyVisible = (selector, edge, limit) => [...node.querySelectorAll(selector)]
+        .filter(item => item.getBoundingClientRect()[edge] <= limit + 1).length;
+      return {
+        sessions: fullyVisible('thead th:not(:first-child)', 'right', viewport.left + node.clientWidth),
+        students: fullyVisible('tbody tr', 'bottom', viewport.top + node.clientHeight),
+        pageFits: viewport.bottom <= innerHeight,
+        horizontalScroll: node.scrollWidth > node.clientWidth,
+        verticalScroll: node.scrollHeight > node.clientHeight
+      };
+    });
+    const expectedGrid = { sessions: 35, students: 33, pageFits: true, horizontalScroll: true, verticalScroll: true };
+    assert.deepEqual(await visibleGrid(), expectedGrid);
+    await page.setViewportSize({ width: 1920, height: 1200 });
+    assert.deepEqual(await visibleGrid(), expectedGrid);
+    const lastCells = await page.locator('#matrix-scroll').evaluate(node => {
+      node.scrollLeft = node.scrollWidth;
+      node.scrollTop = node.scrollHeight;
+      const viewport = node.getBoundingClientRect();
+      const lastDate = node.querySelector('thead th:last-child').getBoundingClientRect();
+      const lastStudent = node.querySelector('tbody tr:last-child').getBoundingClientRect();
+      return {
+        lastDate: lastDate.right <= viewport.left + node.clientWidth + 1,
+        lastStudent: lastStudent.bottom <= viewport.top + node.clientHeight + 1
+      };
+    });
+    assert.deepEqual(lastCells, { lastDate: true, lastStudent: true });
+    await page.setViewportSize({ width: 1366, height: 768 });
     await page.getByRole('button', { name: 'Главная' }).click();
     await page.locator('.schedule-lesson').getByRole('button', { name: '2ПИЛОТ-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
@@ -140,7 +172,9 @@ const server = createServer(async (req, res) => {
     await subgroupFilter.selectOption('1');
     assert.equal(await page.locator('.matrix tbody tr').count(), 1);
     assert.equal(await page.locator('.grid-date[data-type="П2"]').count(), 0);
-    assert.equal(await page.locator('.grid-date[data-type="ИН"]').count(), 1);
+    assert.equal(await page.locator('.grid-date[data-type="ИН"]').count(), 0);
+    assert.equal(await page.locator('.grid-date[data-type="Г"]').count(), 0);
+    assert.equal(await page.locator('.grid-date').count(), 1);
     await page.getByLabel('Тип занятия').selectOption('П1');
     await subgroupFilter.selectOption('2');
     assert.equal(await page.getByLabel('Тип занятия').inputValue(), '');
@@ -148,7 +182,8 @@ const server = createServer(async (req, res) => {
     assert.equal(await page.locator('.student-number').textContent(), '2');
     assert.equal(await page.locator('.grid-date[data-type="П1"]').count(), 0);
     assert.equal(await page.locator('.grid-date[data-type="П2"]').count(), 1);
-    assert.ok(await page.locator('.grid-date[data-type="Г"]').count());
+    assert.equal(await page.locator('.grid-date[data-type="Г"]').count(), 0);
+    assert.equal(await page.locator('.grid-date').count(), 1);
     await subgroupFilter.selectOption('');
     assert.equal(await page.locator('.matrix tbody tr').count(), 2);
     const editable = page.locator('.grid-mark:not([disabled])').last();
