@@ -4,8 +4,14 @@ window.JOURNAL_CONFIG = Object.freeze({
   googleClientId: "571080877264-e5grv7q34vq5dvd5cqbua1haj4l5ddbf.apps.googleusercontent.com",
   redirectUri: "https://kupryakoff.github.io/Journal/",
   timeZone: "Asia/Irkutsk",
-  // Compatibility with deployments that still return numeric groups in the schedule.
+  // Verified group names for the timetable's numeric-only response.
+  // Some numbers are reused between courses, so the subject is part of the key.
   scheduleGroupAliases: {
-    "5": { groupId: "tito25-it", subjects: ["информационные технологии", "конструктор карьеры"] }
+    "2": { "информатика": "1КСК-26" },
+    "4": { "информатика": "1ОП-26" },
+    "5": { "информационные технологии": "2ТиТО-25", "конструктор карьеры": "2ТиТО-25" },
+    "7": { "информатика": "1РЗ-26", "прикладные компьютерные программы в профессиональной деятельности": "2РЗ-25" },
+    "8": { "информатика": "1ЭС2-26", "прикладные компьютерные программы в профессиональной деятельности": "2ЭС2-25" },
+    "12": { "информатика": "1ТЭС2-26" }
   }
 });

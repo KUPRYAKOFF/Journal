@@ -927,11 +927,32 @@ dialog form {
 
 .editor-row {
   display: grid;
-  grid-template-columns: minmax(120px,1fr) 102px minmax(100px,1.4fr);
+  grid-template-columns: minmax(120px,1fr) 36px 102px minmax(100px,1.4fr);
   align-items: center;
   gap: 9px;
   padding: 5px 0;
   border-bottom: 1px solid var(--line);
+}
+
+.attendance-toggle {
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--positive-bg);
+  color: var(--positive-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.attendance-toggle[aria-pressed="true"] {
+  background: var(--negative-bg);
+  color: var(--negative-ink);
+  border-color: var(--negative-edge);
+}
+
+.attendance-toggle:hover {
+  border-color: currentColor;
 }
 
 .editor-row textarea {
@@ -1464,7 +1485,7 @@ dialog form {
     grid-column: 1/-1;
   }
   .editor-row {
-    grid-template-columns: 1fr 86px;
+    grid-template-columns: minmax(0,1fr) 34px 86px;
   }
   .editor-row textarea {
     grid-column: 1/-1;
