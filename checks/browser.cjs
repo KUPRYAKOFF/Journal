@@ -15,6 +15,11 @@ const lessons = Array.from({ length: 20 }, (_, index) => ({
   id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: index === 19 ? 'П1' : 'Г', topicId: '',
   note: '', marks: { s1: { value: '5', note: '' }, s2: { value: 'н', note: '' } }, position: index, version: 1
 }));
+const denseStudents = Array.from({ length: 33 }, (_, index) => ({ id: 'dense-' + index, surname: 'Тестов', name: 'Иван', subgroup: '1' }));
+const denseLessons = Array.from({ length: 48 }, (_, index) => ({
+  ...lessons[index % lessons.length], id: 'dense-' + index, position: index,
+  date: new Date(Date.UTC(2026, 9, index + 1)).toISOString().slice(0, 10)
+}));
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
@@ -29,7 +34,11 @@ const server = createServer(async (req, res) => {
       switch (request.action) {
         case 'session': data = { email: 'pilot@example.test' }; break;
         case 'groups': data = [group, otherCourse]; break;
-        case 'group': data = { group: request.groupId === otherCourse.id ? otherCourse : group, students, lessons, topics }; break;
+        case 'group':
+          data = request.groupId === otherCourse.id
+            ? { group: otherCourse, students: denseStudents, lessons: denseLessons, topics: [] }
+            : { group, students, lessons, topics };
+          break;
         case 'saveTopic':
           if (row) Object.assign(row, { title: request.title, version: row.version + 1 });
           else topics.push({ id: request.newId, kind: request.kind, title: request.title, unmatchedDates: {}, version: 1 });
@@ -41,14 +50,15 @@ const server = createServer(async (req, res) => {
           break;
         }
         case 'schedule':
-          data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: 'Пилот', subject: 'Информатика', room: '5' }] };
+          data = { parity: 'нечетная', items: [{ day: 1, pair: 2, week: 1, group: '2пилот-25', subject: 'Информатика', room: '5' },
+            { day: 2, pair: 1, week: 1, group: '8', subject: 'Информатика', room: '6' }] };
           break;
       }
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ ok: true, data }));
     }
     const filename = path === '/' ? 'index.html' : path.slice(1);
-    if (!['index.html','app.js','styles.css','config.js'].includes(filename)) return res.writeHead(404).end();
+    if (!['index.html','app.js','styles.css','config.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
     res.setHeader('Content-Type', ({ html:'text/html', css:'text/css', js:'text/javascript' })[filename.split('.').pop()] + '; charset=UTF-8');
     const source = filename === 'config.js'
       ? 'window.JOURNAL_CONFIG={apiUrl:"/api",timeZone:"Asia/Irkutsk"};'
@@ -72,17 +82,33 @@ const server = createServer(async (req, res) => {
     assert.equal(await page.locator('.grid-mark').count(), 0);
     await page.evaluate(() => sessionStorage.setItem('journal.session', 'browser-fixture'));
     await page.reload();
+    await page.getByRole('heading', { name: 'Расписание' }).waitFor();
+    assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
+    assert.ok(await page.getByText('Каб. 5', { exact: false }).isVisible());
+    assert.ok(await page.getByText('Группа 8', { exact: true }).isVisible());
+    const firstCourse = page.locator('details[data-course="1"]');
+    await firstCourse.locator('summary').press('Enter');
+    assert.equal(await firstCourse.getAttribute('open'), '');
+    assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await firstCourse.getByRole('button', { name: /1ПИЛОТ-26/ }).click();
+    await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
+    assert.equal(await page.locator('.matrix tbody tr').count(), 33);
+    assert.equal(await page.locator('.grid-date').count(), 48);
+    const matrix = await page.locator('#matrix-scroll').evaluate(node => ({
+      sw: node.scrollWidth, cw: node.clientWidth, sh: node.scrollHeight, ch: node.clientHeight,
+      bottom: node.getBoundingClientRect().bottom, viewport: innerHeight,
+      components: [...document.querySelectorAll('.main-content, .group-header, .summary, .tabs, .banner, .journal-panel .toolbar')]
+        .map(el => [el.className, el.getBoundingClientRect().top, el.getBoundingClientRect().height])
+    }));
+    assert.ok(matrix.sw <= matrix.cw && matrix.sh <= matrix.ch && matrix.bottom <= matrix.viewport, JSON.stringify(matrix));
+    await page.getByRole('button', { name: 'Главная' }).click();
+    await page.locator('.schedule-lesson').getByRole('button', { name: '2ПИЛОТ-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('.matrix tbody tr').count(), 2);
     assert.equal(await page.locator('#group-title').textContent(), 'Информационные технологии - 2ПИЛОТ-25');
-    assert.equal(await page.getByRole('tab', { name: '2 курс' }).getAttribute('aria-selected'), 'true');
-    assert.equal(await page.locator('#groups button').count(), 1);
-    await page.getByRole('tab', { name: '2 курс' }).press('ArrowLeft');
-    await page.getByRole('heading', { name: 'Информатика - 1ПИЛОТ-26' }).waitFor();
-    assert.ok(await page.locator('#groups').getByRole('button', { name: /1ПИЛОТ-26/ }).isVisible());
-    assert.equal(await page.locator('#groups').getByRole('button', { name: /2ПИЛОТ-25/ }).count(), 0);
-    await page.getByRole('tab', { name: '2 курс' }).click();
-    await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
+    assert.equal(await page.locator('.grid-date').first().textContent(), '20.11');
+    assert.equal(await page.locator('.grid-date').last().textContent(), '01.11');
     const firstStudent = page.locator('.matrix tbody th').first();
     assert.equal(await firstStudent.locator('.student-name').textContent(), 'Тестов Иван');
     assert.equal(await firstStudent.locator('.student-sub').textContent(), 'П1');
@@ -91,7 +117,7 @@ const server = createServer(async (req, res) => {
       const subgroup = node.querySelector('.student-sub').getBoundingClientRect();
       return name.right < subgroup.left && name.top < subgroup.bottom && subgroup.top < name.bottom;
     }));
-    const date = page.locator('.grid-date').last();
+    const date = page.locator('.grid-date').first();
     const style = await date.evaluate(node => ({
       width: node.closest('th').getBoundingClientRect().width,
       writing: getComputedStyle(node).writingMode,
@@ -111,6 +137,7 @@ const server = createServer(async (req, res) => {
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     await page.getByRole('button', { name: 'Готово' }).click();
     await page.reload();
+    await page.locator('.schedule-lesson').getByRole('button', { name: '2ПИЛОТ-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-dark.png' });
@@ -142,9 +169,14 @@ const server = createServer(async (req, res) => {
     await page.getByText('Тема удалена из вычитки.').waitFor();
     await page.getByRole('button', { name: 'Занятия', exact: true }).click();
     assert.ok(await page.getByText('Тема после правки', { exact: true }).isVisible());
-    await page.getByRole('button', { name: 'Расписание' }).click();
-    await page.getByText('Каб. 5', { exact: false }).waitFor();
-    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await page.getByRole('button', { name: 'Аналитика' }).click();
+    await page.locator('#chart-average').waitFor();
+    assert.equal(await page.locator('#chart-average').evaluate(node => Chart.getChart(node).config.type), 'line');
+    assert.equal(await page.locator('#chart-attendance').evaluate(node => Chart.getChart(node).config.type), 'line');
+    assert.equal(await page.locator('#chart-average').evaluate(node => Chart.getChart(node).data.labels[0]), '01.11');
+    await page.locator('#timeline-attendance').selectOption('month');
+    assert.equal(await page.locator('#timeline-attendance').inputValue(), 'month');
+    if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-charts.png' });
     await page.getByRole('button', { name: 'Рулетка' }).click();
     await page.getByLabel('Кого включить').selectOption('existing-0');
     await page.getByRole('button', { name: 'Выбрать студента' }).click();

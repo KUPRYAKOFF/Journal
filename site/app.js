@@ -3,7 +3,8 @@
 const cfg = window.JOURNAL_CONFIG;
 const state = {
   token: '', email: '', groups: [], selected: '', data: null, tab: 'journal',
-  query: '', type: '', period: '', request: 0
+  query: '', type: '', period: '', request: 0,
+  openCourses: new Set(), chartPeriods: { average: 'all', attendance: 'all' }, charts: new Map()
 };
 const types = { 'Г': 'Лекция', 'П1': 'Практика · 1', 'П2': 'Практика · 2', 'ИН': 'ИН' };
 const $ = id => document.getElementById(id);
@@ -91,7 +92,8 @@ function showSignIn(error = '') {
   state.request++;
   sessionStorage.removeItem('journal.session');
   $('workspace').hidden = true;
-  $('content').replaceChildren();
+  clearContent();
+  state.openCourses.clear();
   renderGroups();
   $('summary').replaceChildren();
   if (dialog.open) dialog.close();
@@ -110,12 +112,8 @@ async function openWorkspace(account) {
   state.groups = groups;
   $('auth').hidden = true;
   $('workspace').hidden = false;
-  if (groups.length) await loadGroup(groups[0].id);
-  else {
-    renderGroups();
-    renderGroup();
-    message($('banner'), 'В базе пока нет групп.');
-  }
+  renderGroups();
+  await openHome();
 }
 
 async function init() {
@@ -144,34 +142,31 @@ async function init() {
 
 function renderGroups() {
   const courses = [...new Set(state.groups.map(groupCourse))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
-  const selected = state.groups.find(group => group.id === state.selected);
-  const active = selected ? groupCourse(selected) : courses[0];
-  $('courses').innerHTML = courses.map(course => `
-    <button type="button" id="course-${course}" role="tab" data-course="${course}" aria-controls="course-panel"
-      aria-selected="${course === active}" tabindex="${course === active ? '0' : '-1'}">${course === 'other' ? 'Другие' : course + ' курс'}</button>`).join('');
-
-  const panel = $('course-panel');
-  panel.hidden = !active;
-  if (active) panel.setAttribute('aria-labelledby', 'course-' + active);
-  else panel.removeAttribute('aria-labelledby');
-  $('groups').innerHTML = state.groups.filter(group => groupCourse(group) === active).map(group => `
-    <button type="button" data-group="${html(group.id)}" aria-current="${group.id === state.selected}">
-      <span class="group-letter" aria-hidden="true">${html(group.subjectCode)}</span>
-      <span class="group-name">${html(group.name)}<small>${html(group.subject)}</small></span>
-    </button>`).join('');
+  $('home').setAttribute('aria-current', state.selected ? 'false' : 'page');
+  $('courses').innerHTML = courses.map(course => {
+    const title = course === 'other' ? 'Другие группы' : course + ' курс';
+    const groups = state.groups.filter(group => groupCourse(group) === course);
+    return `<details class="course" data-course="${course}" ${state.openCourses.has(course) ? 'open' : ''}>
+      <summary>${title}</summary><div class="groups">${groups.map(group => `
+        <button type="button" data-group="${html(group.id)}" aria-current="${group.id === state.selected}">
+          <span class="group-letter" aria-hidden="true">${html(group.subjectCode)}</span>
+          <span class="group-name">${html(group.name)}<small>${html(group.subject)}</small></span>
+        </button>`).join('')}</div></details>`;
+  }).join('');
 }
 
-function selectCourse(tab) {
-  if (tab.getAttribute('aria-selected') === 'true') return;
-  const group = state.groups.find(item => groupCourse(item) === tab.dataset.course);
-  if (!group) return;
-  loadGroup(group.id);
-  $(tab.id)?.focus();
+function clearContent() {
+  for (const chart of state.charts.values()) chart.destroy();
+  state.charts.clear();
+  $('content').replaceChildren();
 }
 
 async function loadGroup(id, refresh = false, success = '') {
   const request = ++state.request;
   if (id !== state.selected) {
+    const group = state.groups.find(item => item.id === id);
+    if (!group) return;
+    state.openCourses.add(groupCourse(group));
     state.selected = id;
     state.data = null;
     state.query = state.type = state.period = '';
@@ -219,14 +214,14 @@ function statistics(students, lessons) {
 function renderGroup() {
   const data = state.data;
   const group = data?.group || state.groups.find(item => item.id === state.selected);
-  const title = group ? [group.subject, group.name].filter(Boolean).join(' - ') : 'Группы';
+  const title = group ? [group.subject, group.name].filter(Boolean).join(' - ') : 'Главная';
   $('group-title').textContent = title;
   $('group-title').title = title;
   $('group-actions').hidden = !group;
   $('download').disabled = $('new-lesson').disabled = $('roulette').disabled = !data;
   $('summary').hidden = $('tabs').hidden = !data;
   if (!data) {
-    $('content').replaceChildren();
+    clearContent();
     return;
   }
   const stats = statistics(data.students, data.lessons);
@@ -244,6 +239,7 @@ function renderTab() {
     else item.removeAttribute('aria-current');
   }
   if (!state.data) return;
+  clearContent();
   const renderers = { journal: renderMatrix, lessons: renderLessons, topics: renderTopics, analytics: renderAnalytics };
   renderers[state.tab]();
 }
@@ -263,14 +259,15 @@ function journalStudentLabel(student) {
   return `<span class="student-label"><span class="student-name" title="${name}">${name}</span>${subgroup}</span>`;
 }
 
-function matrixBody(autoScroll = false) {
+function matrixBody(resetScroll = false) {
   const scroller = $('matrix-scroll');
   if (!scroller) return;
   const scroll = scroller.scrollLeft;
   const query = state.query.toLocaleLowerCase('ru').trim();
   const students = state.data.students.filter(student => studentName(student).toLocaleLowerCase('ru').includes(query));
-  const lessons = ordered(state.data.lessons).filter(lesson =>
-    (!state.type || lesson.type === state.type) && (!state.period || lesson.date.startsWith(state.period)));
+  const lessons = [...state.data.lessons].filter(lesson =>
+    (!state.type || lesson.type === state.type) && (!state.period || lesson.date.startsWith(state.period)))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.position - a.position);
   if (!lessons.length || !students.length) {
     scroller.innerHTML = `<p class="empty">${!lessons.length ? 'Нет занятий за выбранный период.' : 'Студенты не найдены.'}</p>`;
     return;
@@ -291,12 +288,15 @@ function matrixBody(autoScroll = false) {
         data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" title="${html(tooltip)}" ${active ? '' : 'disabled'}
         aria-label="${html(label)}">${html(entry.value || (active ? '·' : '—'))}</button></td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
-  scroller.scrollLeft = autoScroll ? scroller.scrollWidth : scroll;
+  const matrix = scroller.querySelector('.matrix');
+  matrix.style.setProperty('--lesson-count', lessons.length);
+  matrix.style.setProperty('--student-count', students.length);
+  scroller.scrollLeft = resetScroll ? 0 : scroll;
 }
 
 function renderMatrix() {
-  const dates = [...new Set(ordered(state.data.lessons).map(lesson => lesson.date.slice(0, 7)).filter(Boolean))];
-  $('content').innerHTML = `<article class="panel">
+  const dates = [...new Set(ordered(state.data.lessons).map(lesson => lesson.date.slice(0, 7)).filter(Boolean))].reverse();
+  $('content').innerHTML = `<article class="panel journal-panel">
     <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· присутствовал · н пропуск · штриховка — другая подгруппа</p></div>
     <div class="buttons"><input id="student-search" type="search" placeholder="Найти студента" aria-label="Поиск студента" value="${html(state.query)}">
     <select id="period-filter" aria-label="Месяц"><option value="">Все месяцы</option>${dates.map(iso => 
@@ -337,21 +337,90 @@ function renderTopics() {
   }).join('')}</div>${hasUnmatched ? '<p class="hint">* Дата из исходной вычитки без соответствующего занятия в журнале.</p>' : ''}`;
 }
 
+const timelinePeriods = [
+  ['month', 'Месяц', 1], ['halfyear', 'Полугодие', 6], ['year', 'Год', 12], ['all', 'Всё время', 0]
+];
+const timelineCharts = [
+  { key: 'average', title: 'Успеваемость группы', label: 'Средний балл', min: 2, max: 5, step: 0.5, suffix: '', color: '--positive-ink' },
+  { key: 'attendance', title: 'Посещаемость группы', label: 'Посещаемость', min: 0, max: 100, step: 20, suffix: '%', color: '--blue' }
+];
+
+function timelineStart(period) {
+  const monthsBack = timelinePeriods.find(([key]) => key === period)?.[2] || 0;
+  if (!monthsBack) return '';
+  const [year, month, day] = today().split('-').map(Number);
+  const cutoff = new Date(Date.UTC(year, month - 1 - monthsBack, 1));
+  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoff.setUTCDate(Math.min(day, lastDay));
+  return cutoff.toISOString().slice(0, 10);
+}
+
+function drawTimeline(chart, chronology) {
+  const { key, title, label, suffix, min, max, step } = chart;
+  const selector = $('timeline-' + key);
+  const canvas = $('chart-' + key);
+  const empty = $('empty-' + key);
+  const update = () => {
+    state.charts.get(key)?.destroy();
+    state.charts.delete(key);
+    state.chartPeriods[key] = selector.value;
+    const start = timelineStart(selector.value);
+    const points = chronology.filter(item => item.date && item.date >= start && item[key] !== null);
+    canvas.parentElement.hidden = !points.length;
+    empty.hidden = Boolean(points.length);
+    if (!points.length) return;
+
+    const css = getComputedStyle(document.documentElement);
+    const themeColor = name => css.getPropertyValue(name).trim();
+    const accent = themeColor(chart.color);
+    const ticks = { color: themeColor('--muted'), font: { size: 10 } };
+    const grid = { color: themeColor('--line') };
+    canvas.setAttribute('aria-label', `${title}. ${points.length} занятий.`);
+    state.charts.set(key, new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: points.map(point => shortDate(point.date)),
+        datasets: [{ label, data: points.map(point => point[key]), borderColor: accent,
+          backgroundColor: accent + '22', borderWidth: 2, pointRadius: 2.5, pointHoverRadius: 5, fill: 'start', tension: .3 }]
+      },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          title: items => fullDate(points[items[0].dataIndex].date),
+          label: context => label + ': ' + number(context.parsed.y, 2) + suffix
+        } } },
+        scales: {
+          x: { ticks: { ...ticks, maxTicksLimit: 10 }, grid },
+          y: { min, max, ticks: { ...ticks, stepSize: step, callback: value => number(value) + suffix }, grid }
+        }
+      }
+    }));
+  };
+  selector.onchange = update;
+  update();
+}
+
 function renderAnalytics() {
   const { students, lessons } = state.data;
   const rows = students.map(student => ({ student, ...statistics([student], lessons) }))
     .sort((a, b) => b.absences - a.absences || (a.average ?? 6) - (b.average ?? 6));
   const chronology = ordered(lessons).map(lesson => ({ date: lesson.date, ...statistics(students, [lesson]) }));
-  const chart = (label, key, max, suffix) => `<article class="panel"><div class="toolbar"><h2>${label}</h2></div>
-     <div class="trend-items">${chronology.filter(item => item[key] !== null).map(item =>
-       `<div class="trend-item"><span>${shortDate(item.date)}</span><progress max="${max}" value="${item[key]}" aria-label="${label} ${fullDate(item.date)}"></progress>
-       <span class="number">${number(item[key])}${suffix}</span></div>`).join('') || '<p class="empty">Данных пока нет.</p>'}</div></article>`;
-  $('content').innerHTML = `<div class="analytics-layout">${chart('Средний балл по занятиям', 'average', 5, '')}${chart('Посещаемость по занятиям', 'attendance', 100, '%')}</div>
+  $('content').innerHTML = `<div class="analytics-layout">${timelineCharts.map(({ key, title }) => `
+    <article class="panel">
+      <div class="toolbar"><h2>${title}</h2>
+        <select id="timeline-${key}" aria-label="Период: ${title}">${timelinePeriods.map(([period, label]) =>
+          `<option value="${period}" ${period === state.chartPeriods[key] ? 'selected' : ''}>${label}</option>`).join('')}</select>
+      </div>
+      <div class="timeline"><canvas id="chart-${key}" role="img"></canvas></div>
+      <p id="empty-${key}" class="empty" hidden>Нет данных за выбранный период.</p>
+    </article>`).join('')}</div>
      <article class="panel"><div class="toolbar"><h2>По студентам</h2><p>Сортировка по числу пропусков</p></div>
      <div class="table-scroll"><table class="data-table"><thead><tr><th>Студент</th><th class="number">Средний балл</th>
      <th class="number">Пропуски</th><th class="number">Посещаемость</th></tr></thead><tbody>${rows.map(row =>
      `<tr><td>${html(studentName(row.student))}</td><td class="number">${number(row.average, 2)}</td>
      <td class="number">${row.absences}</td><td class="number">${row.attendance === null ? '—' : number(row.attendance) + '%'}</td></tr>`).join('')}</tbody></table></div></article>`;
+  for (const chart of timelineCharts) drawTimeline(chart, chronology);
 }
 
 function openDialog(title, body, actions = '', submit = null) {
@@ -385,6 +454,7 @@ function applyPreferences() {
   root.dataset.theme = preferences.theme;
   root.lang = preferences.language;
   document.querySelector('meta[name="theme-color"]').content = preferences.theme === 'dark' ? '#131925' : '#f5f6fa';
+  if (state.data && state.tab === 'analytics') renderTab();
 }
 
 function openSettings() {
@@ -547,25 +617,44 @@ const weekdayNames = ['Понедельник','Вторник','Среда','Ч
 const baseTimes = ['08:30–10:00','10:20–11:50','12:30–14:00','14:10–15:40'];
 const specialTimes = { 2: ['08:30–10:00','10:20–11:50','13:20–14:50','15:00–16:30'],
   6: ['08:30–10:00','10:20–11:40','12:10–13:40','13:50–15:20'] };
-async function openSchedule() {
-  openDialog('Расписание', '<p role="status">Загружаем расписание…</p>');
+const normalizeGroup = name => String(name || '').trim().toLocaleUpperCase('ru').replace(/[-\s]/g, '');
+
+function scheduleGroup(name) {
+  const raw = String(name || '').trim();
+  const group = state.groups.find(item => normalizeGroup(item.name) === normalizeGroup(raw));
+  if (group) return `<button type="button" class="link-btn" data-group="${html(group.id)}">${html(group.name)}</button>`;
+  const label = /^\d+$/.test(raw) ? 'Группа ' + raw : raw;
+  return `<strong>${html(label || 'Группа не указана')}</strong>`;
+}
+
+async function openHome() {
+  const request = ++state.request;
+  state.selected = '';
+  state.data = null;
+  state.tab = 'journal';
+  renderGroups();
+  renderGroup();
+  message($('banner'));
+  $('content').innerHTML = '<article class="panel"><p class="empty" role="status">Загружаем расписание…</p></article>';
   try {
     const data = await api('schedule');
-    if (!dialog.open || $('dialog-title').textContent !== 'Расписание') return;
-    $('dialog-body').innerHTML = `<label class="field">Неделя<select id="schedule-week">
-      <option value="all">Все недели</option><option value="1">Нечётная</option><option value="0">Чётная</option>
-      </select></label><div id="schedule-grid" class="schedule-grid"></div>`;
+    if (state.request !== request) return;
+    $('content').innerHTML = `<article class="panel home-schedule">
+      <div class="toolbar"><h2>Расписание</h2><label class="schedule-filter">Неделя <select id="schedule-week">
+        <option value="all">Все недели</option><option value="1">Нечётная</option><option value="0">Чётная</option>
+      </select></label></div><div id="schedule-grid" class="schedule-grid"></div></article>`;
     const selector = $('schedule-week');
     selector.value = data.parity === 'нечетная' ? '1' : data.parity === 'четная' ? '0' : 'all';
+    const weekday = new Date(today() + 'T00:00:00Z').getUTCDay();
     const render = () => {
       $('schedule-grid').innerHTML = weekdayNames.map((day, index) => {
         const dayNumber = index + 1;
         const items = data.items.filter(item => item.day === dayNumber &&
-          (selector.value === 'all' || ![0,1].includes(item.week) || String(item.week) === selector.value)).sort((a,b) => a.pair-b.pair);
+          (selector.value === 'all' || ![0, 1].includes(item.week) || String(item.week) === selector.value)).sort((a, b) => a.pair - b.pair);
         const times = specialTimes[dayNumber] || baseTimes;
-        return `<section class="schedule-day"><h3>${day}</h3>${items.map(item =>
-          `<div class="schedule-line"><strong>${item.pair} пара · ${times[item.pair - 1]}</strong>
-          <div>${html([item.group, item.subject].filter(Boolean).join(' · ')) || 'Занятие'}</div>
+        return `<section class="schedule-day" ${weekday === dayNumber ? 'data-today="true"' : ''}><h3>${day}</h3>${items.map(item =>
+          `<div class="schedule-line"><small>${item.pair} пара · ${times[item.pair - 1]}</small>
+          <div class="schedule-lesson">${scheduleGroup(item.group)}<span>${html(item.subject || 'Занятие')}</span></div>
           <small>${html([item.room ? 'Каб. ' + item.room : '', item.week === 1 ? 'Нечётная' : item.week === 0 ? 'Чётная' : 'Каждую неделю'].filter(Boolean).join(' · '))}</small></div>`).join('')
           || '<p class="hint">Нет занятий</p>'}</section>`;
       }).join('');
@@ -573,7 +662,9 @@ async function openSchedule() {
     selector.onchange = render;
     render();
   } catch (error) {
-    if (dialog.open && $('dialog-title').textContent === 'Расписание') $('dialog-body').textContent = error.message;
+    if (state.request !== request) return;
+    $('content').innerHTML = '<article class="panel"><p class="empty" role="status"></p></article>';
+    $('content').querySelector('.empty').textContent = error.message;
   }
 }
 
@@ -665,30 +756,26 @@ $('sign-out').onclick = async () => {
   showSignIn();
   await pending.catch(() => {});
 };
+$('courses').addEventListener('toggle', event => {
+  const course = event.target.dataset.course;
+  if (!course || !event.target.isConnected) return;
+  if (event.target.open) state.openCourses.add(course);
+  else state.openCourses.delete(course);
+}, true);
 $('courses').onclick = event => {
-  const tab = event.target.closest('[data-course]');
-  if (tab) selectCourse(tab);
-};
-$('courses').onkeydown = event => {
-  const tabs = [...$('courses').querySelectorAll('[data-course]')];
-  const index = tabs.indexOf(event.target);
-  if (index < 0) return;
-  const last = tabs.length - 1;
-  const target = {
-    ArrowLeft: (index + last) % tabs.length, ArrowRight: (index + 1) % tabs.length,
-    Home: 0, End: last
-  }[event.key];
-  if (typeof target !== 'number') return;
-  event.preventDefault();
-  selectCourse(tabs[target]);
-};
-$('groups').onclick = event => {
   const button = event.target.closest('[data-group]');
-  if (button) loadGroup(button.dataset.group);
+  if (button) {
+    loadGroup(button.dataset.group);
+    $('courses').querySelector('button[aria-current="true"]')?.focus();
+  }
+};
+$('home').onclick = openHome;
+$('brand-home').onclick = event => {
+  event.preventDefault();
+  openHome();
 };
 $('refresh').onclick = () => loadGroup(state.selected, true, 'Журнал обновлён.');
 $('download').onclick = downloadCsv;
-$('schedule').onclick = openSchedule;
 $('settings').onclick = openSettings;
 $('roulette').onclick = openRoulette;
 $('new-lesson').onclick = () => editLesson();
@@ -714,6 +801,7 @@ $('content').addEventListener('change', event => {
 $('content').onclick = event => {
   const action = event.target.closest('button');
   if (!action || action.disabled) return;
+  if (action.dataset.group) loadGroup(action.dataset.group);
   if (action.dataset.lesson) editLesson(state.data.lessons.find(item => item.id === action.dataset.lesson), action.dataset.student);
   if (action.dataset.newTopic) editTopic(action.dataset.newTopic);
   if (action.dataset.topic) {

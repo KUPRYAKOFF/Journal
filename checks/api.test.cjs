@@ -26,6 +26,7 @@ function server() {
     console, Date,
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: value => ({ setMimeType: () => value }) },
     Utilities: {
+      formatDate: () => '2026-11',
       getUuid: crypto.randomUUID, DigestAlgorithm: { SHA_256: 'sha256' },
       computeDigest: (algorithm, text) => crypto.createHash(algorithm).update(text).digest(),
       base64EncodeWebSafe: bytes => bytes.toString('base64url')
@@ -47,7 +48,7 @@ function server() {
           email_verified: code !== 'unverified-code' });
       },
       fetchAll: () => [response([{ parityWeek: 'нечётная' }]), response([{ dayOfWeek: 1, numberPair: 2, typeWeek: null,
-        group: { name: 'Пилот' }, pair: { name: 'Информатика' }, numberRoom: '5' }])]
+        group: { name: 5, numberCourse: 2, nameNavigation: { nameGroup: 'ТИТО' } }, pair: { name: 'Информатика' }, numberRoom: '5' }])]
     },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
     SpreadsheetApp: { flush() {}, openById: () => {
@@ -113,5 +114,7 @@ test('lesson and topic mutations preserve records and reject conflicting edits',
   assert.equal(send('saveLesson', { ...lessonFields, newId: crypto.randomUUID() }).code, 'INPUT');
   assert.equal(send('deleteLesson', { id: lessonId, version: 1 }).ok, true);
   assert.equal(send('group').data.lessons.length, 0);
-  assert.equal(send('schedule').data.items[0].week, -1);
+  const schedule = send('schedule').data.items[0];
+  assert.equal(schedule.week, -1);
+  assert.equal(schedule.group, '2ТИТО-25');
 });

@@ -305,11 +305,13 @@ function schedule_() {
     if (responses[1].getResponseCode() !== 200) throw new Error('Schedule unavailable');
     const settings = responses[0].getResponseCode() === 200 ? JSON.parse(responses[0].getContentText()) : [];
     const parityText = String(settings?.[0]?.parityWeek || '').toLowerCase().replace(/ё/g, 'е');
+    const [year, month] = Utilities.formatDate(new Date(), 'Asia/Irkutsk', 'yyyy-MM').split('-').map(Number);
+    const academicYear = month >= 9 ? year : year - 1;
     const result = {
       parity: ['четная', 'нечетная'].includes(parityText) ? parityText : '',
       items: JSON.parse(responses[1].getContentText()).map(item => ({
         day: Number(item.dayOfWeek), pair: Number(item.numberPair), week: item.typeWeek == null ? -1 : Number(item.typeWeek),
-        group: typeof item.group === 'string' ? item.group : String(item.group?.name || item.group?.number || ''),
+        group: scheduleGroup_(item.group, academicYear),
         subject: String(item.pair?.name || ''), room: String(item.numberRoom || '')
       })).filter(item => item.day >= 1 && item.day <= 6 && item.pair >= 1 && item.pair <= 4)
     };
@@ -318,4 +320,14 @@ function schedule_() {
   } catch (_) {
     fail_('SCHEDULE', 'Источник расписания сейчас недоступен.');
   }
+}
+
+function scheduleGroup_(group, academicYear) {
+  if (typeof group === 'string') return group;
+  const abbreviation = String(group?.nameNavigation?.nameGroup || '').trim();
+  const course = Number(group?.numberCourse);
+  if (abbreviation && Number.isInteger(course) && course > 0) {
+    return `${course}${abbreviation}-${String(academicYear - course + 1).slice(-2)}`;
+  }
+  return String(group?.name || group?.number || '');
 }

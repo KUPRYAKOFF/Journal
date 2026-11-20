@@ -150,7 +150,7 @@ button,a {
 
 .workspace {
   display: grid;
-  grid-template-columns: 244px minmax(0,1fr);
+  grid-template-columns: 204px minmax(0,1fr);
   min-height: 100dvh;
 }
 
@@ -160,10 +160,10 @@ button,a {
   height: 100dvh;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
-  padding: 25px 17px 18px;
+  padding: 18px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 17px;
 }
 
 .brand {
@@ -205,34 +205,54 @@ button,a {
 }
 
 .tools-label {
-  margin-top: 24px;
+  margin-top: 14px;
+}
+
+.home-menu {
+  margin-bottom: 10px;
 }
 
 .course-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin: 0 0 8px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 
-.course-tabs button {
-  min-height: 31px;
-  padding: 4px 8px;
-  background: var(--surface);
+.course {
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.course summary {
+  display: list-item;
+  padding: 7px 8px;
   border-radius: 7px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
 }
 
-.course-tabs button:hover,
-.course-tabs button[aria-selected="true"] {
-  border-color: var(--accent-edge);
+.course[open] summary,
+.course summary:hover {
   background: var(--tint);
   color: var(--blue-dark);
+}
+
+.course summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.course .groups {
+  padding: 4px;
+}
+
+.course .groups button {
+  gap: 6px;
+  padding: 6px;
 }
 
 .groups {
@@ -243,7 +263,7 @@ button,a {
 .groups button {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
   border: 1px solid transparent;
   width: 100%;
   text-align: left;
@@ -259,7 +279,7 @@ button,a {
   background: var(--row-hover);
 }
 
-.groups button[aria-current=true] {
+.groups button[aria-current=true],.groups button[aria-current=page] {
   background: var(--tint);
   color: var(--blue-dark);
   border-color: var(--accent-edge);
@@ -327,7 +347,7 @@ button,a {
 }
 
 .main-content {
-  padding: 24px clamp(16px,3vw,44px) 44px;
+  padding: 12px clamp(12px,1.5vw,24px) 22px;
   max-width: 1650px;
   width: 100%;
   margin-inline: auto;
@@ -339,7 +359,7 @@ button,a {
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
 }
 
 .eyebrow {
@@ -418,17 +438,17 @@ button,a {
 .summary {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
-  gap: 12px;
-  margin-bottom: 22px;
+  gap: 8px;
+  margin-bottom: 5px;
 }
 
 .metric {
-  padding: 15px 17px;
+  padding: 6px 10px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--round);
   display: grid;
-  gap: 6px;
+  gap: 1px;
 }
 
 .metric small {
@@ -437,7 +457,7 @@ button,a {
 }
 
 .metric strong {
-  font-size: 25px;
+  font-size: 20px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.04em;
 }
@@ -446,7 +466,7 @@ button,a {
   display: flex;
   gap: 20px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 18px;
+  margin-bottom: 6px;
   overflow: auto;
 }
 
@@ -456,7 +476,7 @@ button,a {
   color: var(--muted);
   font-size: 14px;
   font-weight: 700;
-  padding: 12px 2px;
+  padding: 7px 2px;
   white-space: nowrap;
   border-bottom: 3px solid transparent;
 }
@@ -467,8 +487,8 @@ button,a {
 }
 
 .banner {
-  padding: 11px 14px;
-  margin-bottom: 13px;
+  padding: 5px 9px;
+  margin-bottom: 5px;
   border-radius: 10px;
   background: var(--tint);
   color: var(--blue-dark);
@@ -494,7 +514,7 @@ button,a {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 14px 16px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -517,10 +537,10 @@ button,a {
 
 .field input,.field select,.field textarea,.toolbar input,.toolbar select,.mark-select {
   min-width: 0;
-  min-height: 37px;
+  min-height: 31px;
   border: 1px solid var(--field-border);
   border-radius: 8px;
-  padding: 7px 9px;
+  padding: 4px 7px;
   color: var(--ink);
   background: var(--surface);
 }
@@ -790,24 +810,10 @@ input::placeholder, textarea::placeholder {
   accent-color: var(--blue);
 }
 
-.trend-item {
-  display: grid;
-  grid-template-columns: 50px minmax(0,1fr) 47px;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  padding: 4px 12px;
-}
-
-.trend-item progress {
-  width: 100%;
-  accent-color: var(--blue);
-}
-
-.trend-items {
-  max-height: 225px;
-  overflow: auto;
-  padding: 8px 0;
+.timeline {
+  position: relative;
+  height: 220px;
+  margin: 8px 10px 10px;
 }
 
 .analytics-layout {
@@ -955,9 +961,141 @@ dialog form {
   font-weight: 800;
 }
 
+.home-schedule .schedule-grid {
+  padding: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.schedule-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.schedule-day[data-today="true"] {
+  border-color: var(--accent-edge);
+}
+
+.schedule-day[data-today="true"] h3 {
+  color: var(--blue);
+}
+
+.schedule-lesson {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 7px;
+}
+
+@media(min-width:801px) and (min-height:520px) {
+  .main-content:has(.journal-panel) {
+    height: 100dvh;
+    padding-block: 8px 6px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .main-content:has(.journal-panel) > :not(#content) {
+    flex-shrink: 0;
+  }
+
+  .main-content:has(.journal-panel) .group-header button {
+    min-height: 31px;
+    padding-block: 4px;
+  }
+
+  .main-content:has(.journal-panel) .metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    padding-block: 4px;
+  }
+
+  .main-content:has(.journal-panel) .metric strong {
+    font-size: 17px;
+  }
+
+  .main-content:has(.journal-panel) .tabs button {
+    padding-block: 5px;
+  }
+
+  .journal-panel .toolbar {
+    padding-block: 4px;
+  }
+
+  .journal-panel .toolbar h2 {
+    font-size: 14px;
+  }
+
+  .journal-panel .toolbar p {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  #content:has(.journal-panel), .journal-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  #matrix-scroll {
+    container-type: size;
+    flex: 1;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .matrix {
+    --student-width: 151px;
+    --lesson-width: clamp(16px, calc((100cqw - var(--student-width) - 2px) / var(--lesson-count, 1)), 32px);
+    --row-height: clamp(16px, calc((100cqh - 51px) / var(--student-count, 1)), 29px);
+    width: calc(var(--student-width) + var(--lesson-width) * var(--lesson-count, 1));
+    table-layout: fixed;
+    font-size: 11px;
+  }
+
+  .matrix th, .matrix td {
+    width: var(--lesson-width);
+    min-width: 0;
+    padding-block: 0;
+  }
+
+  .matrix th:first-child {
+    width: var(--student-width);
+    min-width: 0;
+    padding: 0 5px;
+  }
+
+  .matrix .student-sub {
+    padding-block: 1px;
+  }
+
+  .matrix .grid-head, .matrix .grid-mark {
+    width: 100%;
+  }
+
+  .matrix .grid-head {
+    min-height: 49px;
+    gap: 2px;
+    padding-block: 2px;
+  }
+
+  .matrix .grid-mark {
+    height: max(15px, calc(var(--row-height) - 1px));
+    min-height: 0;
+  }
+}
+
 @media(max-width:1050px) {
   .topic-columns {
     grid-template-columns: 1fr;
+  }
+  .home-schedule .schedule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -997,11 +1135,23 @@ dialog form {
     grid-row: 2;
     grid-column: 1/-1;
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 6px;
     overflow: clip;
   }
+  .course-menu {
+    grid-area: 2 / 1 / 3 / -1;
+  }
   .course-tabs {
-    margin-bottom: 4px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .home-menu {
+    margin-bottom: 0;
+    grid-area: 1 / 1;
+  }
+  .tools-menu {
+    grid-area: 1 / 2;
   }
   .side-inner .groups {
     overflow: auto;
@@ -1028,10 +1178,10 @@ dialog form {
     font-size: 10px;
   }
   .main-content {
-    padding-top: 19px;
+    padding-top: 10px;
   }
   .metric {
-    padding: 11px;
+    padding: 5px 8px;
   }
   .group-header {
     align-items: start;
@@ -1042,10 +1192,16 @@ dialog form {
   .summary {
     grid-template-columns: repeat(2,minmax(0,1fr));
     gap: 7px;
-    margin-bottom: 12px;
+    margin-bottom: 5px;
+  }
+  .metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
   }
   .metric strong {
-    font-size: 20px;
+    font-size: 16px;
   }
   .tabs {
     gap: 14px;
@@ -1053,7 +1209,7 @@ dialog form {
   .auth-card {
     padding: 30px 25px;
   }
-  .analytics-layout,.schedule-grid {
+  .analytics-layout,.schedule-grid,.home-schedule .schedule-grid {
     grid-template-columns: 1fr;
   }
   .lesson-fields {
