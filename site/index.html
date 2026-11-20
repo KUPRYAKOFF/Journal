@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#f5f6fa">
+  <title>Электронный журнал</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./config.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main id="auth" class="auth">
+    <section class="auth-card">
+      <span class="brand-icon" aria-hidden="true">Ж</span>
+      <h1>Электронный журнал</h1>
+      <p>Войдите через Google, чтобы открыть журнал преподавателя.</p>
+      <button class="primary" id="sign-in">Войти через Google</button>
+      <p id="auth-status" role="status" hidden></p>
+    </section>
+  </main>
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="./"><span class="brand-icon" aria-hidden="true">Ж</span><strong>Электронный<br> журнал</strong></a>
+      <div class="side-inner">
+        <p class="side-label">Группы</p>
+        <nav id="groups" class="groups" aria-label="Группы"></nav>
+        <p class="side-label tools-label">Инструменты</p>
+        <div class="groups">
+          <button id="schedule" class="side-tool"><span aria-hidden="true">▦</span> Расписание</button>
+          <button id="roulette" class="side-tool" disabled><span aria-hidden="true">◎</span> Рулетка</button>
+        </div>
+      </div>
+      <div class="account">
+        <span class="avatar" id="avatar" aria-hidden="true"></span>
+        <span id="email" class="email"></span>
+        <button id="sign-out" class="plain sign-out">Выйти</button>
+      </div>
+    </aside>
+    <main class="main-content" id="main">
+      <header class="group-header">
+        <div><p id="subject" class="eyebrow">Журнал преподавателя</p><h1 id="group-title">Группы</h1></div>
+        <div id="group-actions" class="buttons" hidden>
+          <button id="refresh" class="secondary" aria-label="Обновить данные" title="Обновить данные">↻</button>
+          <button id="download" class="secondary">Скачать CSV</button>
+          <button id="new-lesson" class="primary">＋ Занятие</button>
+        </div>
+      </header>
+      <div id="summary" class="summary" hidden></div>
+      <nav id="tabs" class="tabs" aria-label="Разделы журнала" hidden>
+        <button data-tab="journal">Журнал</button>
+        <button data-tab="lessons">Занятия</button>
+        <button data-tab="topics">Вычитка</button>
+        <button data-tab="analytics">Аналитика</button>
+      </nav>
+      <div id="banner" class="banner" role="status" hidden></div>
+      <section id="content" aria-label="Данные группы"></section>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title">
+    <form id="dialog-form">
+      <header class="dialog-header"><div><p id="dialog-kicker" class="eyebrow" hidden></p><h2 id="dialog-title"></h2></div>
+        <button id="dialog-close" class="secondary square" type="button" aria-label="Закрыть">×</button>
+      </header>
+      <div id="dialog-body" class="dialog-body"></div>
+      <footer class="dialog-footer"><p id="dialog-status" role="status" hidden></p><div id="dialog-actions" class="buttons"></div></footer>
+    </form>
+  </dialog>
+</body>
+</html>
