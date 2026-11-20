@@ -12,7 +12,7 @@ const students = [
 ];
 const topics = [];
 const lessons = Array.from({ length: 20 }, (_, index) => ({
-  id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: index === 19 ? 'П1' : 'Г', topicId: '',
+  id: 'existing-' + index, date: '2026-11-' + String(index + 1).padStart(2, '0'), type: ['ИН', 'П2', 'П1'][index - 17] || 'Г', topicId: '',
   note: '', marks: { s1: { value: '5', note: '' }, s2: { value: 'н', note: '' } }, position: index, version: 1
 }));
 const denseStudents = Array.from({ length: 33 }, (_, index) => ({ id: 'dense-' + index, surname: 'Тестов', name: 'Иван', subgroup: '1' }));
@@ -125,10 +125,32 @@ const server = createServer(async (req, res) => {
     }));
     assert.equal(style.writing, 'vertical-rl');
     assert.ok(style.width <= 34 && style.typeBelow);
-    const locked = page.locator('.grid-mark[disabled]').last();
-    assert.ok(await locked.isDisabled());
+    assert.equal(await page.locator('#courses .group-letter').count(), 0);
+    assert.equal(await firstStudent.locator('.student-number').textContent(), '1');
+    const colors = await page.locator('.grid-date').evaluateAll(nodes => Object.fromEntries(nodes.map(node =>
+      [node.nextElementSibling.textContent, getComputedStyle(node).backgroundColor])));
+    assert.deepEqual(colors, { 'Л': 'rgba(0, 0, 0, 0)', 'П1': 'rgb(217, 240, 255)', 'П2': 'rgb(238, 227, 255)', 'Ин': 'rgb(231, 245, 239)' });
+    const locked = page.locator('.grid-unavailable').last();
+    assert.equal(await locked.textContent(), '');
+    assert.equal(await locked.locator('button').count(), 0);
     assert.equal(await locked.evaluate(node => getComputedStyle(node).cursor), 'not-allowed');
-    assert.match(await locked.evaluate(node => getComputedStyle(node).backgroundImage), /repeating-linear-gradient/);
+    assert.equal(await locked.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(255, 255, 255)');
+    assert.equal(await locked.evaluate(node => getComputedStyle(node).backgroundImage), 'none');
+    const subgroupFilter = page.getByLabel('Состав журнала');
+    await subgroupFilter.selectOption('1');
+    assert.equal(await page.locator('.matrix tbody tr').count(), 1);
+    assert.equal(await page.locator('.grid-date[data-type="П2"]').count(), 0);
+    assert.equal(await page.locator('.grid-date[data-type="ИН"]').count(), 1);
+    await page.getByLabel('Тип занятия').selectOption('П1');
+    await subgroupFilter.selectOption('2');
+    assert.equal(await page.getByLabel('Тип занятия').inputValue(), '');
+    assert.equal(await page.locator('.student-name').textContent(), 'Тестова Анна');
+    assert.equal(await page.locator('.student-number').textContent(), '2');
+    assert.equal(await page.locator('.grid-date[data-type="П1"]').count(), 0);
+    assert.equal(await page.locator('.grid-date[data-type="П2"]').count(), 1);
+    assert.ok(await page.locator('.grid-date[data-type="Г"]').count());
+    await subgroupFilter.selectOption('');
+    assert.equal(await page.locator('.matrix tbody tr').count(), 2);
     const editable = page.locator('.grid-mark:not([disabled])').last();
     assert.equal(await editable.evaluate(node => getComputedStyle(node).cursor), 'pointer');
     await page.getByRole('button', { name: 'Настройки' }).click();
