@@ -3,10 +3,12 @@
 const cfg = window.JOURNAL_CONFIG;
 const state = {
   token: '', email: '', groups: [], selected: '', data: null, tab: 'journal',
-  query: '', type: '', period: '', request: 0,
+  query: '', type: '', period: '', subgroup: '', request: 0,
   openCourses: new Set(), chartPeriods: { average: 'all', attendance: 'all' }, charts: new Map()
 };
-const types = { 'Г': 'Лекция', 'П1': 'Практика · 1', 'П2': 'Практика · 2', 'ИН': 'ИН' };
+const types = { 'Г': 'Лекция', 'П1': 'Подгруппа 1', 'П2': 'Подгруппа 2', 'ИН': 'Иное' };
+const typeCodes = { 'Г': 'Л', 'П1': 'П1', 'П2': 'П2', 'ИН': 'Ин' };
+const subgroupViews = [['', 'Группа'], ['1', 'Первая подгруппа'], ['2', 'Вторая подгруппа']];
 const $ = id => document.getElementById(id);
 const form = $('dialog-form');
 const dialog = $('dialog');
@@ -149,7 +151,6 @@ function renderGroups() {
     return `<details class="course" data-course="${course}" ${state.openCourses.has(course) ? 'open' : ''}>
       <summary>${title}</summary><div class="groups">${groups.map(group => `
         <button type="button" data-group="${html(group.id)}" aria-current="${group.id === state.selected}">
-          <span class="group-letter" aria-hidden="true">${html(group.subjectCode)}</span>
           <span class="group-name">${html(group.name)}<small>${html(group.subject)}</small></span>
         </button>`).join('')}</div></details>`;
   }).join('');
@@ -169,7 +170,7 @@ async function loadGroup(id, refresh = false, success = '') {
     state.openCourses.add(groupCourse(group));
     state.selected = id;
     state.data = null;
-    state.query = state.type = state.period = '';
+    state.query = state.type = state.period = state.subgroup = '';
   }
   renderGroups();
   renderGroup();
@@ -248,15 +249,17 @@ function typePill(value) {
   const cls = value === 'Г' ? '' : value === 'ИН' ? ' neutral' : ' practice';
   return `<span class="pill${cls}">${html(types[value] || value || '—')}</span>`;
 }
-function typeSelect(selected = '', all = false) {
-  return (all ? '<option value="">Все типы</option>' : '') + Object.entries(types).map(([key, name]) =>
-    `<option value="${key}" ${key === selected ? 'selected' : ''}>${name}</option>`).join('');
+function typeSelect(selected = '', all = false, subgroup = '') {
+  return (all ? '<option value="">Все типы</option>' : '') + Object.entries(types)
+    .filter(([key]) => !subgroup || applies({ subgroup }, key))
+    .map(([key, name]) => `<option value="${key}" ${key === selected ? 'selected' : ''}>${name}</option>`).join('');
 }
-function journalStudentLabel(student) {
+function journalStudentLabel(student, rosterNumber) {
   const name = html(shortStudentName(student));
   const subgroup = ['1', '2'].includes(student.subgroup)
     ? `<small class="student-sub" aria-label="Подгруппа ${student.subgroup}">П${student.subgroup}</small>` : '';
-  return `<span class="student-label"><span class="student-name" title="${name}">${name}</span>${subgroup}</span>`;
+  const serial = rosterNumber ? `<span class="student-number">${rosterNumber}</span>` : '';
+  return `<span class="student-label">${serial}<span class="student-name" title="${name}">${name}</span>${subgroup}</span>`;
 }
 
 function matrixBody(resetScroll = false) {
@@ -264,8 +267,11 @@ function matrixBody(resetScroll = false) {
   if (!scroller) return;
   const scroll = scroller.scrollLeft;
   const query = state.query.toLocaleLowerCase('ru').trim();
-  const students = state.data.students.filter(student => studentName(student).toLocaleLowerCase('ru').includes(query));
-  const lessons = [...state.data.lessons].filter(lesson =>
+  const subgroup = state.subgroup;
+  const students = state.data.students.map((student, index) => ({ student, rosterNumber: index + 1 }))
+    .filter(({ student }) => (!subgroup || student.subgroup === subgroup) && studentName(student).toLocaleLowerCase('ru').includes(query));
+  const lessons = state.data.lessons.filter(lesson =>
+    (!subgroup || applies({ subgroup }, lesson.type)) &&
     (!state.type || lesson.type === state.type) && (!state.period || lesson.date.startsWith(state.period)))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.position - a.position);
   if (!lessons.length || !students.length) {
@@ -275,18 +281,17 @@ function matrixBody(resetScroll = false) {
   scroller.innerHTML = `<table class="matrix"><thead><tr><th scope="col">Студент</th>${lessons.map(lesson => {
     const label = [fullDate(lesson.date), types[lesson.type] || lesson.type, topicName(lesson.topicId)].filter(Boolean).join(' · ');
     return `<th scope="col"><button type="button" class="grid-head" data-lesson="${html(lesson.id)}"
-      title="${html(label)}" aria-label="${html(label)}"><span class="grid-date">${html(shortDate(lesson.date))}</span>
-      <small>${html(lesson.type)}</small></button></th>`;
+      title="${html(label)}" aria-label="${html(label)}">
+      <span class="grid-date" data-type="${html(lesson.type)}">${html(shortDate(lesson.date))}</span>
+      <small>${html(typeCodes[lesson.type] || lesson.type)}</small></button></th>`;
   }).join('')}</tr></thead>
-    <tbody>${students.map(student => `<tr><th scope="row">${journalStudentLabel(student)}</th>${lessons.map(lesson => {
+    <tbody>${students.map(({ student, rosterNumber }) => `<tr><th scope="row">${journalStudentLabel(student, rosterNumber)}</th>${lessons.map(lesson => {
+      if (!applies(student, lesson.type)) return '<td class="grid-unavailable" aria-label="Другая подгруппа"></td>';
       const entry = mark(lesson, student);
-      const active = applies(student, lesson.type);
-      const status = active ? (entry.value || 'присутствовал') : 'другая подгруппа';
-      const tooltip = active ? (entry.value || 'Поставить отметку') : 'Другая подгруппа';
-      const label = [shortStudentName(student), fullDate(lesson.date), status].join(', ');
+      const label = [shortStudentName(student), fullDate(lesson.date), entry.value || 'присутствовал'].join(', ');
       return `<td><button type="button" class="grid-mark" data-lesson="${html(lesson.id)}" data-student="${html(student.id)}"
-        data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" title="${html(tooltip)}" ${active ? '' : 'disabled'}
-        aria-label="${html(label)}">${html(entry.value || (active ? '·' : '—'))}</button></td>`;
+        data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" title="${html(entry.value || 'Поставить отметку')}"
+        aria-label="${html(label)}">${html(entry.value || '·')}</button></td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
   const matrix = scroller.querySelector('.matrix');
   matrix.style.setProperty('--lesson-count', lessons.length);
@@ -297,11 +302,14 @@ function matrixBody(resetScroll = false) {
 function renderMatrix() {
   const dates = [...new Set(ordered(state.data.lessons).map(lesson => lesson.date.slice(0, 7)).filter(Boolean))].reverse();
   $('content').innerHTML = `<article class="panel journal-panel">
-    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· присутствовал · н пропуск · штриховка — другая подгруппа</p></div>
-    <div class="buttons"><input id="student-search" type="search" placeholder="Найти студента" aria-label="Поиск студента" value="${html(state.query)}">
+    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· — присутствовал, н — пропуск</p></div>
+    <div class="buttons">
+    <select id="subgroup-filter" aria-label="Состав журнала">${subgroupViews.map(([value, label]) =>
+      `<option value="${value}" ${value === state.subgroup ? 'selected' : ''}>${label}</option>`).join('')}</select>
+    <input id="student-search" type="search" placeholder="Найти студента" aria-label="Поиск студента" value="${html(state.query)}">
     <select id="period-filter" aria-label="Месяц"><option value="">Все месяцы</option>${dates.map(iso => 
       `<option value="${html(iso)}" ${iso === state.period ? 'selected' : ''}>${months[Number(iso.slice(5)) - 1]} ${iso.slice(0, 4)}</option>`).join('')}</select>
-    <select id="type-filter" aria-label="Тип занятия">${typeSelect(state.type, true)}</select></div></div>
+    <select id="type-filter" aria-label="Тип занятия">${typeSelect(state.type, true, state.subgroup)}</select></div></div>
     <div id="matrix-scroll" class="table-scroll"></div></article>`;
   matrixBody(true);
 }
@@ -525,7 +533,7 @@ function editTopic(kind, existing) {
   const newId = existing ? undefined : crypto.randomUUID();
   const name = kind === 'lecture' ? 'Лекция' : 'Практика';
   openDialog(existing ? 'Редактировать тему' : 'Новая тема',
-    `<p>${typePill(kind === 'lecture' ? 'Г' : 'П1')} <span class="hint">${name === 'Практика' ? 'Одна тема для обеих подгрупп' : ''}</span></p>
+    `<p>${kind === 'lecture' ? typePill('Г') : '<span class="pill practice">Практика</span>'} <span class="hint">${name === 'Практика' ? 'Одна тема для обеих подгрупп' : ''}</span></p>
     <label class="field">Название темы<input id="topic-title" required maxlength="500" value="${html(existing?.title)}"></label>`,
     (existing ? '<button type="button" id="topic-delete" class="danger">Удалить тему</button>' : '') +
     '<button class="primary">Сохранить</button>',
@@ -674,7 +682,7 @@ function openRoulette() {
   const current = options.find(lesson => lesson.date === today());
   openDialog('Рулетка', `<label class="field">Кого включить<select id="roulette-lesson">
     <option value="">Вся группа</option>${options.map(lesson => `<option value="${html(lesson.id)}" ${lesson === current ? 'selected' : ''}>
-      ${fullDate(lesson.date)} · ${html(lesson.type)}${lesson.topicId ? ' · ' + html(topicName(lesson.topicId)) : ''}</option>`).join('')}</select></label>
+      ${fullDate(lesson.date)} · ${html(typeCodes[lesson.type] || lesson.type)}${lesson.topicId ? ' · ' + html(topicName(lesson.topicId)) : ''}</option>`).join('')}</select></label>
     <p id="roulette-count" class="hint"></p><p id="roulette-result" class="roulette-result" aria-live="polite">Кого вызовем?</p>`,
     '<button class="primary" id="spin">Выбрать студента</button>', () => {
       const pool = candidates();
@@ -795,7 +803,11 @@ $('content').addEventListener('input', event => {
 $('content').addEventListener('change', event => {
   if (event.target.id === 'period-filter') state.period = event.target.value;
   else if (event.target.id === 'type-filter') state.type = event.target.value;
-  else return;
+  else if (event.target.id === 'subgroup-filter') {
+    state.subgroup = event.target.value;
+    if (!applies({ subgroup: state.subgroup }, state.type)) state.type = '';
+    $('type-filter').innerHTML = typeSelect(state.type, true, state.subgroup);
+  } else return;
   matrixBody(true);
 });
 $('content').onclick = event => {

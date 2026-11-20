@@ -27,8 +27,10 @@
   --negative-edge: #e9c7ce;
   --grade-bg: #eef2fc;
   --grade-edge: #c6d0ed;
-  --locked-bg: #f6f7fb;
-  --locked-stripe: #dfe4ee;
+  --date-p1-bg: #d9f0ff;
+  --date-p1-ink: #145477;
+  --date-p2-bg: #eee3ff;
+  --date-p2-ink: #643691;
   --auth-glow: #e3e8ff;
   font-family: Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   color: var(--ink);
@@ -63,8 +65,10 @@
   --negative-edge: #775363;
   --grade-bg: #263552;
   --grade-edge: #465a84;
-  --locked-bg: #202838;
-  --locked-stripe: #394459;
+  --date-p1-bg: #21465e;
+  --date-p1-ink: #b5e5ff;
+  --date-p2-bg: #483462;
+  --date-p2-ink: #e4ccff;
   --auth-glow: #29345b;
 }
 
@@ -285,7 +289,7 @@ button,a {
   border-color: var(--accent-edge);
 }
 
-.group-letter,.avatar {
+.avatar {
   display: grid;
   place-items: center;
   flex: none;
@@ -619,7 +623,7 @@ input::placeholder, textarea::placeholder {
   z-index: 3;
 }
 
-.matrix tbody tr:hover > *, .data-table tbody tr:hover td {
+.matrix tbody tr:hover > :not(.grid-unavailable), .data-table tbody tr:hover td {
   background: var(--row-hover);
 }
 
@@ -632,6 +636,14 @@ input::placeholder, textarea::placeholder {
   align-items: center;
   gap: 5px;
   min-width: 0;
+}
+
+.student-number {
+  flex: none;
+  min-width: 2ch;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .student-name {
@@ -678,6 +690,28 @@ input::placeholder, textarea::placeholder {
   text-orientation: sideways;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.grid-date[data-type="П1"],
+.grid-date[data-type="П2"],
+.grid-date[data-type="ИН"] {
+  padding: 2px 1px;
+  border-radius: 3px;
+}
+
+.grid-date[data-type="П1"] {
+  background: var(--date-p1-bg);
+  color: var(--date-p1-ink);
+}
+
+.grid-date[data-type="П2"] {
+  background: var(--date-p2-bg);
+  color: var(--date-p2-ink);
+}
+
+.grid-date[data-type="ИН"] {
+  background: var(--positive-bg);
+  color: var(--positive-ink);
 }
 
 .grid-head small {
@@ -734,11 +768,8 @@ input::placeholder, textarea::placeholder {
   background: var(--blue);
 }
 
-.grid-mark:disabled {
-  background: repeating-linear-gradient(135deg, var(--locked-bg) 0 3px, var(--locked-stripe) 3px 4px);
-  border-color: var(--line);
-  color: var(--muted);
-  opacity: 1;
+.grid-unavailable {
+  background: var(--surface);
   cursor: not-allowed;
 }
 
@@ -1050,9 +1081,9 @@ dialog form {
   }
 
   .matrix {
-    --student-width: 151px;
+    --student-width: 164px;
     --lesson-width: clamp(16px, calc((100cqw - var(--student-width) - 2px) / var(--lesson-count, 1)), 32px);
-    --row-height: clamp(16px, calc((100cqh - 51px) / var(--student-count, 1)), 29px);
+    --row-height: clamp(16px, calc((100cqh - 57px) / var(--student-count, 1)), 29px);
     width: calc(var(--student-width) + var(--lesson-width) * var(--lesson-count, 1));
     table-layout: fixed;
     font-size: 11px;
@@ -1171,9 +1202,6 @@ dialog form {
     padding: 5px 7px;
     gap: 6px;
   }
-  .group-letter {
-    display: none;
-  }
   .groups button small {
     font-size: 10px;
   }
@@ -1228,9 +1256,9 @@ dialog form {
     padding: 12px;
   }
   .matrix th:first-child {
-    width: 139px;
-    min-width: 139px;
-    max-width: 139px;
+    width: 151px;
+    min-width: 151px;
+    max-width: 151px;
     padding-inline: 5px;
   }
   .group-header h1 {
