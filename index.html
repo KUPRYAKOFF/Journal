@@ -7,9 +7,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="theme-color" content="#f5f6fa">
   <title>Электронный журнал</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=2">
   <script src="./config.js" defer></script>
-  <script src="./app.js" defer></script>
+  <script src="./app.js?v=2" defer></script>
 </head>
 <body>
   <main id="auth" class="auth">
@@ -25,12 +25,18 @@
     <aside class="sidebar">
       <a class="brand" href="./"><span class="brand-icon" aria-hidden="true">Ж</span><strong>Электронный<br> журнал</strong></a>
       <div class="side-inner">
-        <p class="side-label">Группы</p>
-        <nav id="groups" class="groups" aria-label="Группы"></nav>
+        <section class="course-menu" aria-label="Группы по курсам">
+          <p class="side-label">Курсы</p>
+          <div id="courses" class="course-tabs" role="tablist" aria-label="Курсы"></div>
+          <div id="course-panel" role="tabpanel" hidden>
+            <nav id="groups" class="groups" aria-label="Группы выбранного курса"></nav>
+          </div>
+        </section>
         <p class="side-label tools-label">Инструменты</p>
         <div class="groups">
           <button id="schedule" class="side-tool"><span aria-hidden="true">▦</span> Расписание</button>
           <button id="roulette" class="side-tool" disabled><span aria-hidden="true">◎</span> Рулетка</button>
+          <button id="settings" class="side-tool"><span aria-hidden="true">⚙︎</span> Настройки</button>
         </div>
       </div>
       <div class="account">
@@ -41,7 +47,7 @@
     </aside>
     <main class="main-content" id="main">
       <header class="group-header">
-        <div><p id="subject" class="eyebrow">Журнал преподавателя</p><h1 id="group-title">Группы</h1></div>
+        <h1 id="group-title">Группы</h1>
         <div id="group-actions" class="buttons" hidden>
           <button id="refresh" class="secondary" aria-label="Обновить данные" title="Обновить данные">↻</button>
           <button id="download" class="secondary">Скачать CSV</button>

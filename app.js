@@ -14,7 +14,9 @@ const html = value => String(value ?? '').replace(/[&<>"']/g, character => ({
 })[character]);
 const absent = value => ['н', 'нб'].includes(String(value ?? '').trim().toLowerCase());
 const applies = (student, type) => !(type === 'П1' && student.subgroup === '2') && !(type === 'П2' && student.subgroup === '1');
-const studentName = student => [student.surname, student.name, student.patronymic].filter(Boolean).join(' ');
+const shortStudentName = student => [student.surname, student.name].filter(Boolean).join(' ');
+const studentName = student => [shortStudentName(student), student.patronymic].filter(Boolean).join(' ');
+const groupCourse = group => String(group.name).trim().match(/^([1-9]\d*)/)?.[1] || 'other';
 const mark = (lesson, student) => lesson.marks[student.id] || { value: '', note: '' };
 const ordered = lessons => [...lessons].sort((a, b) =>
   (a.date || '9999').localeCompare(b.date || '9999') || a.position - b.position);
@@ -90,7 +92,7 @@ function showSignIn(error = '') {
   sessionStorage.removeItem('journal.session');
   $('workspace').hidden = true;
   $('content').replaceChildren();
-  $('groups').replaceChildren();
+  renderGroups();
   $('summary').replaceChildren();
   if (dialog.open) dialog.close();
   $('dialog-body').replaceChildren();
@@ -141,11 +143,30 @@ async function init() {
 }
 
 function renderGroups() {
-  $('groups').innerHTML = state.groups.map(group => `
-    <button data-group="${html(group.id)}" aria-current="${group.id === state.selected}">
+  const courses = [...new Set(state.groups.map(groupCourse))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+  const selected = state.groups.find(group => group.id === state.selected);
+  const active = selected ? groupCourse(selected) : courses[0];
+  $('courses').innerHTML = courses.map(course => `
+    <button type="button" id="course-${course}" role="tab" data-course="${course}" aria-controls="course-panel"
+      aria-selected="${course === active}" tabindex="${course === active ? '0' : '-1'}">${course === 'other' ? 'Другие' : course + ' курс'}</button>`).join('');
+
+  const panel = $('course-panel');
+  panel.hidden = !active;
+  if (active) panel.setAttribute('aria-labelledby', 'course-' + active);
+  else panel.removeAttribute('aria-labelledby');
+  $('groups').innerHTML = state.groups.filter(group => groupCourse(group) === active).map(group => `
+    <button type="button" data-group="${html(group.id)}" aria-current="${group.id === state.selected}">
       <span class="group-letter" aria-hidden="true">${html(group.subjectCode)}</span>
       <span class="group-name">${html(group.name)}<small>${html(group.subject)}</small></span>
     </button>`).join('');
+}
+
+function selectCourse(tab) {
+  if (tab.getAttribute('aria-selected') === 'true') return;
+  const group = state.groups.find(item => groupCourse(item) === tab.dataset.course);
+  if (!group) return;
+  loadGroup(group.id);
+  $(tab.id)?.focus();
 }
 
 async function loadGroup(id, refresh = false, success = '') {
@@ -198,8 +219,9 @@ function statistics(students, lessons) {
 function renderGroup() {
   const data = state.data;
   const group = data?.group || state.groups.find(item => item.id === state.selected);
-  $('subject').textContent = group?.subject || 'Журнал преподавателя';
-  $('group-title').textContent = group?.name || 'Группы';
+  const title = group ? [group.subject, group.name].filter(Boolean).join(' - ') : 'Группы';
+  $('group-title').textContent = title;
+  $('group-title').title = title;
   $('group-actions').hidden = !group;
   $('download').disabled = $('new-lesson').disabled = $('roulette').disabled = !data;
   $('summary').hidden = $('tabs').hidden = !data;
@@ -234,6 +256,13 @@ function typeSelect(selected = '', all = false) {
   return (all ? '<option value="">Все типы</option>' : '') + Object.entries(types).map(([key, name]) =>
     `<option value="${key}" ${key === selected ? 'selected' : ''}>${name}</option>`).join('');
 }
+function journalStudentLabel(student) {
+  const name = html(shortStudentName(student));
+  const subgroup = ['1', '2'].includes(student.subgroup)
+    ? `<small class="student-sub" aria-label="Подгруппа ${student.subgroup}">П${student.subgroup}</small>` : '';
+  return `<span class="student-label"><span class="student-name" title="${name}">${name}</span>${subgroup}</span>`;
+}
+
 function matrixBody(autoScroll = false) {
   const scroller = $('matrix-scroll');
   if (!scroller) return;
@@ -246,16 +275,21 @@ function matrixBody(autoScroll = false) {
     scroller.innerHTML = `<p class="empty">${!lessons.length ? 'Нет занятий за выбранный период.' : 'Студенты не найдены.'}</p>`;
     return;
   }
-  scroller.innerHTML = `<table class="matrix"><thead><tr><th scope="col">Студент</th>${lessons.map(lesson =>
-    `<th scope="col"><button class="grid-head" data-lesson="${html(lesson.id)}" title="${html(topicName(lesson.topicId) || fullDate(lesson.date))}">
-      <span>${shortDate(lesson.date)}</span><small>${html(lesson.type)}</small></button></th>`).join('')}</tr></thead>
-    <tbody>${students.map(student => `<tr><td><span class="student-name">${html(studentName(student))}</span>
-       ${student.subgroup ? `<small class="student-sub">Подгруппа ${html(student.subgroup)}</small>` : ''}</td>${lessons.map(lesson => {
+  scroller.innerHTML = `<table class="matrix"><thead><tr><th scope="col">Студент</th>${lessons.map(lesson => {
+    const label = [fullDate(lesson.date), types[lesson.type] || lesson.type, topicName(lesson.topicId)].filter(Boolean).join(' · ');
+    return `<th scope="col"><button type="button" class="grid-head" data-lesson="${html(lesson.id)}"
+      title="${html(label)}" aria-label="${html(label)}"><span class="grid-date">${html(shortDate(lesson.date))}</span>
+      <small>${html(lesson.type)}</small></button></th>`;
+  }).join('')}</tr></thead>
+    <tbody>${students.map(student => `<tr><th scope="row">${journalStudentLabel(student)}</th>${lessons.map(lesson => {
       const entry = mark(lesson, student);
       const active = applies(student, lesson.type);
-      return `<td><button class="grid-mark" data-lesson="${html(lesson.id)}" data-student="${html(student.id)}"
-        data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" ${active ? '' : 'disabled'}
-        aria-label="${html(studentName(student) + ', ' + fullDate(lesson.date) + ', ' + (entry.value || (active ? 'присутствовал' : 'другая подгруппа')))}">${html(entry.value || (active ? '·' : '—'))}</button></td>`;
+      const status = active ? (entry.value || 'присутствовал') : 'другая подгруппа';
+      const tooltip = active ? (entry.value || 'Поставить отметку') : 'Другая подгруппа';
+      const label = [shortStudentName(student), fullDate(lesson.date), status].join(', ');
+      return `<td><button type="button" class="grid-mark" data-lesson="${html(lesson.id)}" data-student="${html(student.id)}"
+        data-mark="${html(entry.value)}" data-note="${Boolean(entry.note)}" title="${html(tooltip)}" ${active ? '' : 'disabled'}
+        aria-label="${html(label)}">${html(entry.value || (active ? '·' : '—'))}</button></td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
   scroller.scrollLeft = autoScroll ? scroller.scrollWidth : scroll;
 }
@@ -263,7 +297,7 @@ function matrixBody(autoScroll = false) {
 function renderMatrix() {
   const dates = [...new Set(ordered(state.data.lessons).map(lesson => lesson.date.slice(0, 7)).filter(Boolean))];
   $('content').innerHTML = `<article class="panel">
-    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>Пусто — присутствовал · н — пропуск · тире — другая подгруппа</p></div>
+    <div class="toolbar"><div><h2>Оценки и посещаемость</h2><p>· присутствовал · н пропуск · штриховка — другая подгруппа</p></div>
     <div class="buttons"><input id="student-search" type="search" placeholder="Найти студента" aria-label="Поиск студента" value="${html(state.query)}">
     <select id="period-filter" aria-label="Месяц"><option value="">Все месяцы</option>${dates.map(iso => 
       `<option value="${html(iso)}" ${iso === state.period ? 'selected' : ''}>${months[Number(iso.slice(5)) - 1]} ${iso.slice(0, 4)}</option>`).join('')}</select>
@@ -335,6 +369,54 @@ function openDialog(title, body, actions = '', submit = null) {
   };
   if (!dialog.open) dialog.showModal();
 }
+function readPreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('journal.preferences') || '{}');
+    return { theme: saved?.theme === 'dark' ? 'dark' : 'light', language: 'ru' };
+  } catch {
+    return { theme: 'light', language: 'ru' };
+  }
+}
+
+const preferences = readPreferences();
+
+function applyPreferences() {
+  const root = document.documentElement;
+  root.dataset.theme = preferences.theme;
+  root.lang = preferences.language;
+  document.querySelector('meta[name="theme-color"]').content = preferences.theme === 'dark' ? '#131925' : '#f5f6fa';
+}
+
+function openSettings() {
+  openDialog('Настройки', `
+    <label class="field">Тема<select id="settings-theme">
+      <option value="light">Светлая</option>
+      <option value="dark">Тёмная</option>
+    </select></label>
+    <label class="field">Язык<select id="settings-language">
+      <option value="ru">Русский</option>
+    </select></label>`,
+    '<button class="primary" type="submit">Готово</button>', () => dialog.close());
+  $('dialog-kicker').hidden = true;
+
+  const theme = $('settings-theme');
+  const language = $('settings-language');
+  theme.value = preferences.theme;
+  language.value = preferences.language;
+  const save = () => {
+    preferences.theme = theme.value;
+    preferences.language = language.value;
+    applyPreferences();
+    try {
+      localStorage.setItem('journal.preferences', JSON.stringify(preferences));
+    } catch {
+      message($('dialog-status'), 'Браузер не сохраняет настройки между посещениями.', true);
+    }
+  };
+  theme.onchange = language.onchange = save;
+  theme.focus();
+}
+
 function busyDialog(busy) {
   form.dataset.busy = String(busy);
   for (const control of form.querySelectorAll('button,input,select,textarea')) {
@@ -405,9 +487,8 @@ function editLesson(existing, studentId) {
       const current = drafts.get(student.id);
       const values = [['', 'Присутствовал'], ['н', 'н · пропуск'], ...['2','3','4','5'].map(value => [value, value])];
       if (!values.some(([value]) => value === current.value)) values.push([current.value, current.value]);
-      const name = studentName(student);
-      return `<div class="editor-row" data-roster="${html(student.id)}"><span class="student-name">${html(name)}
-        ${student.subgroup ? `<small class="student-sub">Подгруппа ${html(student.subgroup)}</small>` : ''}</span>
+      const name = shortStudentName(student);
+      return `<div class="editor-row" data-roster="${html(student.id)}">${journalStudentLabel(student)}
         <select class="mark-select" aria-label="${html('Отметка · ' + name)}">${values.map(([value, label]) =>
           `<option value="${html(value)}" ${value === current.value ? 'selected' : ''}>${html(label)}</option>`).join('')}</select>
         <textarea rows="1" aria-label="${html('Комментарий · ' + name)}" placeholder="Комментарий" maxlength="${Math.max(2000, current.note.length)}">${html(current.note)}</textarea>
@@ -584,6 +665,23 @@ $('sign-out').onclick = async () => {
   showSignIn();
   await pending.catch(() => {});
 };
+$('courses').onclick = event => {
+  const tab = event.target.closest('[data-course]');
+  if (tab) selectCourse(tab);
+};
+$('courses').onkeydown = event => {
+  const tabs = [...$('courses').querySelectorAll('[data-course]')];
+  const index = tabs.indexOf(event.target);
+  if (index < 0) return;
+  const last = tabs.length - 1;
+  const target = {
+    ArrowLeft: (index + last) % tabs.length, ArrowRight: (index + 1) % tabs.length,
+    Home: 0, End: last
+  }[event.key];
+  if (typeof target !== 'number') return;
+  event.preventDefault();
+  selectCourse(tabs[target]);
+};
 $('groups').onclick = event => {
   const button = event.target.closest('[data-group]');
   if (button) loadGroup(button.dataset.group);
@@ -591,6 +689,7 @@ $('groups').onclick = event => {
 $('refresh').onclick = () => loadGroup(state.selected, true, 'Журнал обновлён.');
 $('download').onclick = downloadCsv;
 $('schedule').onclick = openSchedule;
+$('settings').onclick = openSettings;
 $('roulette').onclick = openRoulette;
 $('new-lesson').onclick = () => editLesson();
 $('tabs').onclick = event => {
@@ -614,7 +713,7 @@ $('content').addEventListener('change', event => {
 });
 $('content').onclick = event => {
   const action = event.target.closest('button');
-  if (!action) return;
+  if (!action || action.disabled) return;
   if (action.dataset.lesson) editLesson(state.data.lessons.find(item => item.id === action.dataset.lesson), action.dataset.student);
   if (action.dataset.newTopic) editTopic(action.dataset.newTopic);
   if (action.dataset.topic) {
@@ -626,4 +725,5 @@ $('dialog-close').onclick = () => dialog.close();
 dialog.addEventListener('cancel', event => {
   if (form.dataset.busy === 'true') event.preventDefault();
 });
+applyPreferences();
 init().catch(error => showSignIn(error.message));
