@@ -628,11 +628,16 @@ const specialTimes = { 2: ['08:30–10:00','10:20–11:50','13:20–14:50','15:0
   6: ['08:30–10:00','10:20–11:40','12:10–13:40','13:50–15:20'] };
 const normalizeGroup = name => String(name || '').trim().toLocaleUpperCase('ru').replace(/[-\s]/g, '');
 
-function scheduleGroup(name) {
-  const raw = String(name || '').trim();
-  const group = state.groups.find(item => normalizeGroup(item.name) === normalizeGroup(raw));
+function scheduleGroup(lesson) {
+  const raw = String(lesson.group || '').trim();
+  const numeric = /^\d+$/.test(raw);
+  const subject = String(lesson.subject || '').trim().toLocaleLowerCase('ru');
+  const alias = numeric ? cfg.scheduleGroupAliases?.[raw] : null;
+  const group = alias?.subjects.includes(subject)
+    ? state.groups.find(item => item.id === alias.groupId)
+    : state.groups.find(item => normalizeGroup(item.name) === normalizeGroup(raw));
   if (group) return `<button type="button" class="link-btn" data-group="${html(group.id)}">${html(group.name)}</button>`;
-  const label = /^\d+$/.test(raw) ? 'Группа ' + raw : raw;
+  const label = numeric ? 'Группа ' + raw : raw;
   return `<strong>${html(label || 'Группа не указана')}</strong>`;
 }
 
@@ -646,7 +651,7 @@ function renderSchedulePair(lessons, pair, time, currentWeek) {
     ${week === null ? '' : `data-week="${week}" role="group" aria-label="${week ? 'Нечётная неделя' : 'Чётная неделя'}"`}
     ${matches.length ? '' : 'aria-hidden="true"'}
     ${week !== null && currentWeek !== null && week !== currentWeek ? 'data-inactive="true"' : ''}>
-    ${matches.map(lesson => `<div class="schedule-lesson">${scheduleGroup(lesson.group)}
+    ${matches.map(lesson => `<div class="schedule-lesson">${scheduleGroup(lesson)}
       <span title="${html(lesson.subject)}">${html(lesson.subject || 'Занятие')}</span></div>`).join('')}</div>`;
   const shared = lessons.filter(lesson => ![0, 1].includes(lesson.week));
   const alternating = [1, 0].map(week => lessons.filter(lesson => lesson.week === week));
