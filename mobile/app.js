@@ -150,7 +150,7 @@ async function loadGroups() {
 }
 
 function loading(label = 'Загрузка…') {
-  return `<div class="spin-wrap" role="status"><div class="spinner"></div><div class="spin-text">${escape(label)}</div></div>`;
+  return `<div class="loading-status loading-status--stacked mobile-loading" role="status">${JOURNAL_LOADER}${escape(label)}</div>`;
 }
 
 function failure(message, action = 'refresh') {
@@ -389,7 +389,7 @@ function renderDirectory() {
   const matches = state.groups.flatMap(group => (state.cache.get(group.id)?.students || [])
     .filter(student => normalize(fullname(student)).includes(query))
     .map(student => ({ group, student })));
-  const status = state.directoryLoading ? '<div class="global-search-hint" role="status">Загружаем список студентов…</div>'
+  const status = state.directoryLoading ? `<div class="global-search-hint loading-status" role="status">${JOURNAL_LOADER}Загружаем список студентов…</div>`
     : state.directoryError ? failure(state.directoryError, 'directory')
     : matches.length ? '' : '<div class="global-search-hint">Студенты не найдены.</div>';
   content.innerHTML = status + (matches.length ? `<div class="global-result-count">Найдено: ${matches.length}${matches.length > 40 ? ' · показаны первые 40' : ''}</div>
@@ -536,8 +536,11 @@ function renderSendbar() {
   if (!student) return;
   const count = currentDrafts().length;
   $('send-info').textContent = count ? student.surname + ': черновиков — ' + count : 'Выберите оценку на карточке занятия';
-  $('send-btn').textContent = state.sending ? 'Сохраняем…' : 'Отправить в очередь' + (count ? ' (' + count + ')' : '');
-  $('send-btn').disabled = !state.storage || !count || state.sending;
+  const button = $('send-btn');
+  button.textContent = state.sending ? 'Сохраняем…' : 'Отправить в очередь' + (count ? ' (' + count + ')' : '');
+  button.disabled = !state.storage || !count || state.sending;
+  button.classList.toggle('loading-status', state.sending);
+  if (state.sending) button.insertAdjacentHTML('afterbegin', JOURNAL_LOADER);
 }
 
 function render(direction = '') {
@@ -558,10 +561,15 @@ function renderSync() {
   const btn = $('sync-btn');
   const issues = currentQueueCount();
   const queued = state.queue.length;
+  const sending = Boolean(state.storage && !issues && navigator.onLine && state.syncing && queued);
   btn.className = 'sync-btn' + (issues ? ' error' : queued ? ' attention' : '');
   btn.textContent = !state.storage ? 'Ошибка памяти' : issues ? 'Проверить: ' + issues
-    : !navigator.onLine ? 'Офлайн' + (queued ? ' · ' + queued : '') : state.syncing && queued ? 'Отправка · ' + queued
+    : !navigator.onLine ? 'Офлайн' + (queued ? ' · ' + queued : '') : sending ? 'Отправка · ' + queued
     : queued ? 'Очередь · ' + queued : state.drafts.size ? 'Черновики · ' + state.drafts.size : '✓ Всё отправлено';
+  if (sending) {
+    btn.classList.add('loading-status');
+    btn.insertAdjacentHTML('afterbegin', JOURNAL_LOADER);
+  }
   if ($('queue-panel').open) renderQueue();
 }
 
