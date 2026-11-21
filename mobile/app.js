@@ -81,6 +81,7 @@ function showSignIn(message = '') {
   $('toast').textContent = '';
   $('storage-alert').hidden = true;
   $('sync-btn').hidden = $('refresh-btn').hidden = $('logout-btn').hidden = $('mobile-account').hidden = $('sendbar').hidden = true;
+  showPageLoading();
   $('app').innerHTML = `<section class="card auth-mobile">
     <h1>Мобильный журнал</h1><p>Войдите через разрешённый аккаунт Google.</p>
     ${message ? `<p class="auth-message" role="status">${escape(message)}</p>` : ''}
@@ -109,7 +110,8 @@ async function boot() {
   if (state.owner || state.token) return;
   const epoch = ++state.epoch;
   state.token = token;
-  $('app').innerHTML = loading('Проверяем доступ…');
+  $('app').replaceChildren();
+  showPageLoading('Проверяем доступ…');
   try {
     const account = await api('session', {}, epoch);
     state.owner = account.email;
@@ -149,8 +151,11 @@ async function loadGroups() {
   if (state.directoryQuery) loadDirectory();
 }
 
-function loading(label = 'Загрузка…') {
-  return `<div class="loading-status loading-status--stacked mobile-loading" role="status">${JOURNAL_LOADER}${escape(label)}</div>`;
+function showPageLoading(label = '') {
+  const node = $('page-loading');
+  node.hidden = !label;
+  node.textContent = label;
+  if (label) node.insertAdjacentHTML('afterbegin', JOURNAL_LOADER);
 }
 
 function failure(message, action = 'refresh') {
@@ -419,7 +424,6 @@ function renderGroups() {
     <h1 class="group-list-title">Выберите группу</h1>
     <input id="groups-query" class="search" type="search" aria-label="Поиск группы"
       placeholder="Поиск группы или предмета…" value="${escape(state.groupsQuery)}">
-    ${state.loading ? loading() : ''}
     ${state.error ? failure(state.error) : ''}
     <div id="group-list" class="list"></div>`;
   renderGroupList();
@@ -464,7 +468,7 @@ function renderStudents() {
   if (!group) { state.screen = 'groups'; renderGroups(); return; }
   const data = groupData();
   $('app').innerHTML = pageHeading(group.name, group.subject + ' · выберите студента') +
-    (state.loading ? loading() : '') + (state.error ? failure(state.error) : '') +
+    (state.error ? failure(state.error) : '') +
     (data ? `<input class="search" id="student-query" type="search" aria-label="Поиск студента в группе"
       placeholder="Поиск студента…" value="${escape(state.studentQuery)}">
       <div class="seg" aria-label="Подгруппа">${[['', 'Все'], ['1', 'Подгр. 1'], ['2', 'Подгр. 2']].map(([value, label]) =>
@@ -517,7 +521,7 @@ function renderStudent() {
   const student = currentStudent();
   if (!student) {
     if (state.loading || state.error) {
-      $('app').innerHTML = pageHeading(group?.name || '', '') + (state.loading ? loading() : failure(state.error));
+      $('app').innerHTML = pageHeading(group?.name || '', '') + (state.error ? failure(state.error) : '');
       return;
     }
     state.screen = 'students';
@@ -549,6 +553,7 @@ function render(direction = '') {
   else if (state.screen === 'students') renderStudents();
   else renderStudent();
   $('app').className = direction ? 'page-enter-' + direction : '';
+  showPageLoading(state.loading ? (state.screen === 'groups' ? 'Загружаем группы…' : 'Загружаем журнал…') : '');
   renderSendbar();
   renderSync();
 }
@@ -709,7 +714,9 @@ function handleAction(button) {
   switch (action) {
     case 'signin':
       button.disabled = true;
-      return JournalAuth.signIn('mobile').catch(error => { button.disabled = false; showSignIn(error.message); });
+      $('app').replaceChildren();
+      showPageLoading('Открываем вход через Google…');
+      return JournalAuth.signIn('mobile').catch(error => showSignIn(error.message));
     case 'boot': return boot();
     case 'logout': return logout();
     case 'settings': $('theme-panel').showModal(); break;

@@ -10,14 +10,14 @@
   <title>Мобильный журнал — оценки</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="../loader.css?v=1">
-  <link rel="stylesheet" href="./styles.css?v=2">
+  <link rel="stylesheet" href="../loader.css?v=2">
+  <link rel="stylesheet" href="./styles.css?v=3">
   <script src="../config.js?v=3" defer></script>
   <script src="../auth.js?v=1" defer></script>
   <script src="./storage.js" defer></script>
   <script src="./sync.js" defer></script>
   <script src="../loader.js?v=1" defer></script>
-  <script src="./app.js?v=2" defer></script>
+  <script src="./app.js?v=3" defer></script>
 </head>
 <body>
   <header>
@@ -33,6 +33,7 @@
   </header>
   <div id="storage-alert" class="storage-alert" role="status" hidden></div>
   <main id="app" aria-label="Мобильный журнал"></main>
+  <div id="page-loading" class="loading-status loading-status--viewport" role="status" hidden></div>
   <div id="sendbar" hidden>
     <div id="send-info" class="send-info"></div>
     <button id="send-btn" type="button" data-action="send" disabled>Отправить в очередь</button>

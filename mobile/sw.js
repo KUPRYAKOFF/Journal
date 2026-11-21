@@ -1,10 +1,10 @@
 'use strict';
 
-const CACHE = 'journal-mobile-shell-v2';
+const CACHE = 'journal-mobile-shell-v3';
 const HOME = new URL('./', self.location.href).href;
 const ASSETS = [
-  './', './index.html', './manifest.webmanifest', './styles.css?v=2', './storage.js', './sync.js', './app.js?v=2',
-  './icons/icon-192.png', './icons/icon-512.png', '../config.js?v=3', '../auth.js?v=1', '../loader.css?v=1', '../loader.js?v=1'
+  './', './index.html', './manifest.webmanifest', './styles.css?v=3', './storage.js', './sync.js', './app.js?v=3',
+  './icons/icon-192.png', './icons/icon-512.png', '../config.js?v=3', '../auth.js?v=1', '../loader.css?v=2', '../loader.js?v=1'
 ].map(path => new URL(path, HOME).href);
 
 self.addEventListener('install', event => {
