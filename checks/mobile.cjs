@@ -93,10 +93,26 @@ const server = createServer(async (req, res) => {
     assert.equal(grant.searchParams.get('code_challenge_method'), 'S256');
     expectedChallenge.set('test-oauth-code', grant.searchParams.get('code_challenge'));
     await page.waitForURL('https://accounts.google.com/**');
+    let releaseSession;
+    const sessionReady = new Promise(resolve => { releaseSession = resolve; });
+    const holdSession = async route => {
+      if (route.request().postDataJSON().action === 'session') await sessionReady;
+      await route.continue();
+    };
+    await page.route('**/api', holdSession);
     await page.goto(root + '?code=test-oauth-code&state=' + encodeURIComponent(grant.searchParams.get('state')));
     await page.waitForURL(root + 'mobile/');
+    const loader = page.locator('.mobile-loading .journal-loader');
+    await loader.waitFor();
+    assert.equal(await loader.locator('.box .side-top').count(), 4);
+    assert.equal(await loader.locator('.box-2').evaluate(box => getComputedStyle(box).animationName), 'journal-stack');
+    releaseSession();
     await page.getByRole('heading', { name: 'Выберите группу' }).waitFor();
+    await page.unroute('**/api', holdSession);
     await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.endsWith('/mobile/sw.js'));
+    assert.ok(await page.evaluate(async () => Boolean(
+      await caches.match('../loader.js?v=1') && await caches.match('../loader.css?v=1')
+    )));
     const appManifest = await (await page.request.get(root + 'mobile/manifest.webmanifest')).json();
     assert.equal(appManifest.display, 'standalone');
     assert.equal(new URL(appManifest.start_url, root + 'mobile/').href, root + 'mobile/');

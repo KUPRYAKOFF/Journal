@@ -34,7 +34,14 @@ const months = ['январь','февраль','март','апрель','ма�
 function message(node, text = '', error = false) {
   node.hidden = !text;
   node.textContent = text;
+  node.classList.remove('loading-status');
   node.classList.toggle('error', error);
+}
+
+function showLoading(node, text) {
+  message(node, text);
+  node.classList.add('loading-status');
+  node.insertAdjacentHTML('afterbegin', JOURNAL_LOADER);
 }
 
 async function api(action, fields = {}) {
@@ -48,6 +55,7 @@ async function api(action, fields = {}) {
 
 async function signIn() {
   $('sign-in').disabled = true;
+  showLoading($('auth-status'), 'Открываем вход через Google…');
   try {
     await JournalAuth.signIn();
   } catch (error) {
@@ -91,7 +99,7 @@ async function openWorkspace(account) {
 async function init() {
   if (JournalAuth.hasCallback()) {
     $('sign-in').disabled = true;
-    message($('auth-status'), 'Проверяем доступ…');
+    showLoading($('auth-status'), 'Проверяем доступ…');
     const { account, target } = await JournalAuth.finishSignIn();
     if (target === 'mobile') {
       location.replace(new URL('mobile/', cfg.redirectUri));
@@ -104,7 +112,7 @@ async function init() {
   state.token = JournalAuth.token();
   if (state.token) {
     $('sign-in').disabled = true;
-    message($('auth-status'), 'Проверяем доступ…');
+    showLoading($('auth-status'), 'Проверяем доступ…');
     await openWorkspace(await api('session'));
   }
 }
@@ -141,7 +149,7 @@ async function loadGroup(id, refresh = false, success = '') {
   }
   renderGroups();
   renderGroup();
-  message($('banner'), 'Загружаем журнал…');
+  showLoading($('banner'), 'Загружаем журнал…');
   try {
     const data = await api('group', { groupId: id });
     if (state.request !== request) return;
@@ -400,7 +408,8 @@ function renderAnalytics() {
   for (const chart of timelineCharts) drawTimeline(chart, chronology);
 }
 
-function openDialog(title, body, actions = '', submit = null) {
+function openDialog(title, body, actions = '', submit = null, { drawer = false } = {}) {
+  dialog.classList.toggle('lesson-drawer', drawer);
   $('dialog-title').textContent = title;
   const kicker = $('dialog-kicker');
   kicker.textContent = state.data?.group.name || '';
@@ -479,7 +488,7 @@ function busyDialog(busy) {
 async function mutate(action, payload, success) {
   if (form.dataset.busy === 'true') return;
   busyDialog(true);
-  message($('dialog-status'), 'Сохраняем…');
+  showLoading($('dialog-status'), 'Сохраняем…');
   try {
     await api(action, payload);
     dialog.close();
@@ -493,7 +502,7 @@ async function mutate(action, payload, success) {
 function confirmDelete(action, payload, description, success, back) {
   openDialog('Подтвердите удаление', '<p>' + html(description) + '</p>',
     '<button type="button" id="delete-back" class="secondary">Назад</button><button class="danger">Удалить</button>',
-    () => mutate(action, payload, success));
+    () => mutate(action, payload, success), { drawer: dialog.classList.contains('lesson-drawer') });
   $('delete-back').onclick = back;
 }
 
@@ -575,7 +584,7 @@ function editLesson(existing, studentId) {
       });
       mutate('saveLesson', { groupId, newId, id: existing?.id, version: existing?.version, changes,
         type: activeType, date: $('lesson-date').value, topicId: $('lesson-topic').value, note: $('lesson-note').value }, 'Занятие сохранено.');
-    });
+    }, { drawer: true });
   refreshTopics();
   refreshRoster();
   const roster = $('lesson-roster');
@@ -704,7 +713,8 @@ async function openHome() {
   renderGroups();
   renderGroup();
   message($('banner'));
-  $('content').innerHTML = '<article class="panel"><p class="empty" role="status">Загружаем расписание…</p></article>';
+  $('content').innerHTML = '<article class="panel"><p class="empty loading-status--stacked" role="status"></p></article>';
+  showLoading($('content').querySelector('[role="status"]'), 'Загружаем расписание…');
   try {
     const data = await api('schedule');
     if (state.request === request) renderSchedule(data);

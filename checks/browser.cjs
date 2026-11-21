@@ -69,7 +69,7 @@ const server = createServer(async (req, res) => {
       return res.end(JSON.stringify({ ok: true, data }));
     }
     const filename = path === '/' ? 'index.html' : path.slice(1);
-    if (!['index.html','app.js','styles.css','config.js','auth.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
+    if (!['index.html','app.js','styles.css','config.js','auth.js','loader.css','loader.js','vendor/chart.umd.js'].includes(filename)) return res.writeHead(404).end();
     res.setHeader('Content-Type', ({ html:'text/html', css:'text/css', js:'text/javascript' })[filename.split('.').pop()] + '; charset=UTF-8');
     const source = await readFile(join(__dirname, '../site', filename));
     res.end(filename === 'config.js'
@@ -92,8 +92,28 @@ const server = createServer(async (req, res) => {
     assert.ok(await page.getByRole('button', { name: 'Войти через Google' }).isVisible());
     assert.equal(await page.locator('.grid-mark').count(), 0);
     await page.evaluate(() => sessionStorage.setItem('journal.session', 'browser-fixture'));
+    let releaseSchedule;
+    const scheduleReady = new Promise(resolve => { releaseSchedule = resolve; });
+    const holdSchedule = async route => {
+      if (route.request().postDataJSON().action === 'schedule') await scheduleReady;
+      await route.continue();
+    };
+    await page.route('**/api', holdSchedule);
     await page.reload();
+    const scheduleLoader = page.locator('#content .journal-loader');
+    await scheduleLoader.waitFor();
+    assert.deepEqual(await scheduleLoader.locator('.box').evaluateAll(boxes =>
+      boxes.map(box => getComputedStyle(box).animationDelay)), ['0s', '1s', '2s', '3s']);
+    if (process.env.JOURNAL_PREVIEW) {
+      await scheduleLoader.evaluate(node => node.getAnimations({ subtree: true }).forEach(animation => {
+        animation.pause();
+        animation.currentTime = 1800;
+      }));
+      await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-loader.png' });
+    }
+    releaseSchedule();
     await page.getByRole('heading', { name: 'Расписание' }).waitFor();
+    await page.unroute('**/api', holdSchedule);
     assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
     assert.ok(await page.getByText('Каб. 5, 7', { exact: true }).isVisible());
     assert.equal(await page.locator('.schedule-week [aria-current]').textContent(), 'Нечётная');
@@ -149,6 +169,9 @@ const server = createServer(async (req, res) => {
     });
     assert.deepEqual(lastCells, { lastDate: true, lastStudent: true });
     await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('.matrix tbody tr').first().locator('.grid-mark').first().click();
+    assert.ok(await page.locator('#dialog-body').evaluate(body => body.scrollHeight > body.clientHeight));
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Главная' }).click();
     await page.locator('.schedule-lesson').getByRole('button', { name: '2ТиТО-25' }).click();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
@@ -205,8 +228,8 @@ const server = createServer(async (req, res) => {
     await page.getByLabel('Тип занятия').selectOption('П1');
     await subgroupFilter.selectOption('2');
     assert.equal(await page.getByLabel('Тип занятия').inputValue(), '');
-    assert.equal(await page.locator('.student-name').textContent(), 'Тестова Анна');
-    assert.equal(await page.locator('.student-number').textContent(), '2');
+    assert.equal(await page.locator('.matrix .student-name').textContent(), 'Тестова Анна');
+    assert.equal(await page.locator('.matrix .student-number').textContent(), '2');
     assert.equal(await page.locator('.grid-date[data-type="П1"]').count(), 0);
     assert.equal(await page.locator('.grid-date[data-type="П2"]').count(), 1);
     assert.equal(await page.locator('.grid-date[data-type="Г"]').count(), 0);
@@ -242,6 +265,18 @@ const server = createServer(async (req, res) => {
     await page.getByRole('button', { name: 'Тема после правки' }).waitFor();
     await page.getByRole('button', { name: 'Журнал', exact: true }).click();
     await page.locator('.grid-head[data-lesson="existing-0"]').click();
+    const drawer = page.getByRole('dialog', { name: 'Редактировать занятие' });
+    const drawerGeometry = await drawer.evaluate(async node => {
+      const animation = getComputedStyle(node).animationName;
+      await Promise.all(node.getAnimations().map(animation => animation.finished));
+      const bounds = node.getBoundingClientRect();
+      return { animation, left: bounds.left, rightGap: innerWidth - bounds.right,
+        top: bounds.top, bottomGap: innerHeight - bounds.bottom };
+    });
+    assert.equal(drawerGeometry.animation, 'lesson-drawer-in');
+    assert.ok(drawerGeometry.left > 0 && [drawerGeometry.rightGap, drawerGeometry.top, drawerGeometry.bottomGap]
+      .every(gap => Math.abs(gap) <= 1), JSON.stringify(drawerGeometry));
+    if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-drawer.png' });
     const ivanMark = page.getByLabel('Отметка · Тестов Иван');
     const ivanAttendance = page.getByRole('button', { name: 'Пропуск · Тестов Иван' });
     assert.equal(await ivanMark.inputValue(), '5');
@@ -329,6 +364,13 @@ const server = createServer(async (req, res) => {
       getComputedStyle(node).whiteSpace === 'nowrap' && node.scrollWidth <= node.clientWidth));
     assert.ok(await page.locator('#matrix-scroll').evaluate(node => node.scrollWidth > node.clientWidth));
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-mobile.png' });
+    await page.locator('.grid-head[data-lesson="existing-0"]').click();
+    assert.ok(await drawer.evaluate(node => {
+      const bounds = node.getBoundingClientRect();
+      return bounds.left === 0 && bounds.right === innerWidth && bounds.bottom === innerHeight && node.getAnimations().length === 0;
+    }));
+    assert.ok(await drawer.getByRole('button', { name: 'Сохранить' }).evaluate(button =>
+      button.getBoundingClientRect().bottom <= innerHeight));
     assert.deepEqual(errors, []);
     console.log('Chromium: вход, курсы, компактный журнал, настройки темы, редакторы, расписание, рулетка, CSV, мобильная ширина.');
   } finally {

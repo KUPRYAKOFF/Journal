@@ -873,6 +873,44 @@ dialog form {
   max-height: 89dvh;
 }
 
+html:has(.lesson-drawer[open]) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+dialog.lesson-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(clamp(560px, 54vw, 760px), 100%);
+  max-width: 100%;
+  height: 100dvh;
+  max-height: none;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.lesson-drawer[open] {
+  animation: lesson-drawer-in 250ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes lesson-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.lesson-drawer form {
+  height: 100%;
+  max-height: none;
+}
+
+.lesson-drawer .dialog-body {
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
 .dialog-header,.dialog-footer {
   padding: 16px 20px;
   background: var(--surface);

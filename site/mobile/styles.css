@@ -118,10 +118,9 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.ok{border-color:var(--accent);color:var(--accent)}
 #toast.err{border-color:var(--red);color:var(--red)}
-.spin-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:40px 0}
-.spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:sp 1s linear infinite}
-@keyframes sp{to{transform:rotate(360deg)}}
-.spin-text{color:var(--muted);font-size:13px}
+.mobile-loading{padding:24px 0;color:var(--muted);font-size:13px;text-align:center}
+#send-btn.loading-status{justify-content:center}
+.sync-btn.loading-status{--status-loader-scale:.42;gap:4px}
 .error-box{background:rgba(255,69,58,.08);border:1px solid rgba(255,69,58,.35);color:var(--red);padding:12px 14px;border-radius:12px;font-size:13px;display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .error-box button{align-self:flex-start;background:transparent;border:1px solid var(--red);color:var(--red);padding:6px 14px;border-radius:10px;font-size:13px;cursor:pointer}
 .empty{color:var(--muted);text-align:center;padding:30px 0;font-size:14px}
