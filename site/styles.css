@@ -152,6 +152,10 @@ button,a {
   width: 100%;
 }
 
+.auth:has(~ #page-loading:not([hidden])) .auth-card {
+  visibility: hidden;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 204px minmax(0,1fr);
@@ -873,31 +877,44 @@ dialog form {
   max-height: 89dvh;
 }
 
-html:has(.lesson-drawer[open]) {
-  overflow: hidden;
-  scrollbar-gutter: auto;
+dialog.lesson-drawer, dialog.lesson-drawer::backdrop {
+  --drawer-duration: 320ms;
 }
 
 dialog.lesson-drawer {
   position: fixed;
-  inset: 0 0 0 auto;
+  inset: 0 calc(100% - 100vw) 0 auto;
   margin: 0;
-  width: min(clamp(560px, 54vw, 760px), 100%);
-  max-width: 100%;
+  width: min(clamp(560px, 54vw, 760px), 100vw);
+  max-width: 100vw;
   height: 100dvh;
   max-height: none;
   border-width: 0 0 0 1px;
   border-radius: 0;
   overflow: hidden;
+  transform: translateX(100%);
+  transition: transform var(--drawer-duration) cubic-bezier(.25, .72, .25, 1),
+    display var(--drawer-duration) allow-discrete, overlay var(--drawer-duration) allow-discrete;
 }
 
-.lesson-drawer[open] {
-  animation: lesson-drawer-in 250ms cubic-bezier(.2, .8, .2, 1) both;
+dialog.lesson-drawer[open] {
+  transform: translateX(0);
 }
 
-@keyframes lesson-drawer-in {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+dialog.lesson-drawer::backdrop {
+  background: #14214466;
+  opacity: 0;
+  transition: opacity var(--drawer-duration) ease-in-out,
+    display var(--drawer-duration) allow-discrete, overlay var(--drawer-duration) allow-discrete;
+}
+
+dialog.lesson-drawer[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  dialog.lesson-drawer[open] { transform: translateX(100%); }
+  dialog.lesson-drawer[open]::backdrop { opacity: 0; }
 }
 
 .lesson-drawer form {
@@ -909,6 +926,7 @@ dialog.lesson-drawer {
   flex: 1;
   min-height: 0;
   align-content: start;
+  overscroll-behavior: contain;
 }
 
 .dialog-header,.dialog-footer {
@@ -1277,6 +1295,10 @@ dialog.lesson-drawer {
 @media(min-width:801px) {
   :root {
     scrollbar-gutter: stable;
+  }
+
+  :root:has(.lesson-drawer[open]) {
+    overflow: hidden;
   }
 
   .main-content {

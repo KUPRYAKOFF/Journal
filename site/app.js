@@ -13,6 +13,7 @@ const matchesSubgroupLesson = (subgroup, type) => !subgroup || type === 'П' + s
 const $ = id => document.getElementById(id);
 const form = $('dialog-form');
 const dialog = $('dialog');
+const pageLoading = $('page-loading');
 const html = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
@@ -55,11 +56,13 @@ async function api(action, fields = {}) {
 
 async function signIn() {
   $('sign-in').disabled = true;
-  showLoading($('auth-status'), 'Открываем вход через Google…');
+  message($('auth-status'));
+  showLoading(pageLoading, 'Открываем вход через Google…');
   try {
     await JournalAuth.signIn();
   } catch (error) {
     $('sign-in').disabled = false;
+    message(pageLoading);
     message($('auth-status'), error.message || 'Не удалось начать вход. Проверьте настройки браузера.', true);
   }
 }
@@ -80,6 +83,7 @@ function showSignIn(error = '') {
   $('dialog-body').replaceChildren();
   $('auth').hidden = false;
   $('sign-in').disabled = false;
+  message(pageLoading);
   message($('auth-status'), error, Boolean(error));
 }
 
@@ -99,7 +103,7 @@ async function openWorkspace(account) {
 async function init() {
   if (JournalAuth.hasCallback()) {
     $('sign-in').disabled = true;
-    showLoading($('auth-status'), 'Проверяем доступ…');
+    showLoading(pageLoading, 'Проверяем доступ…');
     const { account, target } = await JournalAuth.finishSignIn();
     if (target === 'mobile') {
       location.replace(new URL('mobile/', cfg.redirectUri));
@@ -112,7 +116,7 @@ async function init() {
   state.token = JournalAuth.token();
   if (state.token) {
     $('sign-in').disabled = true;
-    showLoading($('auth-status'), 'Проверяем доступ…');
+    showLoading(pageLoading, 'Проверяем доступ…');
     await openWorkspace(await api('session'));
   }
 }
@@ -149,7 +153,8 @@ async function loadGroup(id, refresh = false, success = '') {
   }
   renderGroups();
   renderGroup();
-  showLoading($('banner'), 'Загружаем журнал…');
+  message($('banner'));
+  showLoading(pageLoading, 'Загружаем журнал…');
   try {
     const data = await api('group', { groupId: id });
     if (state.request !== request) return;
@@ -160,6 +165,8 @@ async function loadGroup(id, refresh = false, success = '') {
   } catch (error) {
     if (state.request !== request) return;
     message($('banner'), error.message, true);
+  } finally {
+    if (state.request === request) message(pageLoading);
   }
 }
 
@@ -712,6 +719,7 @@ async function openHome() {
   state.tab = 'journal';
   renderGroups();
   renderGroup();
+  message(pageLoading);
   message($('banner'));
   $('content').innerHTML = '<article class="panel"><p class="empty loading-status--stacked" role="status"></p></article>';
   showLoading($('content').querySelector('[role="status"]'), 'Загружаем расписание…');
@@ -955,6 +963,18 @@ $('content').onclick = event => {
 $('dialog-close').onclick = () => dialog.close();
 dialog.addEventListener('cancel', event => {
   if (form.dataset.busy === 'true') event.preventDefault();
+});
+let pressedDrawerBackdrop = false;
+function isDrawerBackdrop(event) {
+  return dialog.open && dialog.classList.contains('lesson-drawer') &&
+    event.target === dialog && event.clientX < dialog.getBoundingClientRect().left;
+}
+dialog.addEventListener('pointerdown', event => {
+  pressedDrawerBackdrop = isDrawerBackdrop(event);
+});
+dialog.addEventListener('click', event => {
+  if (pressedDrawerBackdrop && isDrawerBackdrop(event) && form.dataset.busy !== 'true') dialog.close();
+  pressedDrawerBackdrop = false;
 });
 applyPreferences();
 init().catch(error => showSignIn(error.message));

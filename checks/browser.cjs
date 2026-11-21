@@ -92,14 +92,32 @@ const server = createServer(async (req, res) => {
     assert.ok(await page.getByRole('button', { name: 'Войти через Google' }).isVisible());
     assert.equal(await page.locator('.grid-mark').count(), 0);
     await page.evaluate(() => sessionStorage.setItem('journal.session', 'browser-fixture'));
+    let releaseSession;
     let releaseSchedule;
+    let releaseGroup;
+    const sessionReady = new Promise(resolve => { releaseSession = resolve; });
     const scheduleReady = new Promise(resolve => { releaseSchedule = resolve; });
-    const holdSchedule = async route => {
-      if (route.request().postDataJSON().action === 'schedule') await scheduleReady;
+    const groupReady = new Promise(resolve => { releaseGroup = resolve; });
+    const heldResponses = { session: sessionReady, schedule: scheduleReady, group: groupReady };
+    const holdApi = async route => {
+      await heldResponses[route.request().postDataJSON().action];
       await route.continue();
     };
-    await page.route('**/api', holdSchedule);
+    const checkPageLoading = async label => {
+      const loader = page.locator('#page-loading');
+      await loader.waitFor();
+      assert.equal((await loader.textContent()).trim(), label);
+      assert.ok(await loader.evaluate(node => {
+        const bounds = node.getBoundingClientRect();
+        return Math.abs(bounds.left + bounds.width / 2 - innerWidth / 2) <= 1
+          && Math.abs(bounds.top + bounds.height / 2 - innerHeight / 2) <= 1
+          && node.querySelector('.journal-loader').getBoundingClientRect().width >= 150;
+      }));
+    };
+    await page.route('**/api', holdApi);
     await page.reload();
+    await checkPageLoading('Проверяем доступ…');
+    releaseSession();
     const scheduleLoader = page.locator('#content .journal-loader');
     await scheduleLoader.waitFor();
     assert.deepEqual(await scheduleLoader.locator('.box').evaluateAll(boxes =>
@@ -113,7 +131,6 @@ const server = createServer(async (req, res) => {
     }
     releaseSchedule();
     await page.getByRole('heading', { name: 'Расписание' }).waitFor();
-    await page.unroute('**/api', holdSchedule);
     assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
     assert.ok(await page.getByText('Каб. 5, 7', { exact: true }).isVisible());
     assert.equal(await page.locator('.schedule-week [aria-current]').textContent(), 'Нечётная');
@@ -137,7 +154,11 @@ const server = createServer(async (req, res) => {
     assert.ok(await page.getByRole('heading', { name: 'Главная' }).isVisible());
     await page.setViewportSize({ width: 1366, height: 768 });
     await firstCourse.getByRole('button', { name: /1ОП-26/ }).click();
+    await checkPageLoading('Загружаем журнал…');
+    releaseGroup();
     await page.getByRole('heading', { name: 'Оценки и посещаемость' }).waitFor();
+    await page.locator('#page-loading').waitFor({ state: 'hidden' });
+    await page.unroute('**/api', holdApi);
     assert.equal(await page.locator('.matrix tbody tr').count(), 36);
     assert.equal(await page.locator('.grid-date').count(), 48);
     const visibleGrid = () => page.locator('#matrix-scroll').evaluate(node => {
@@ -264,19 +285,34 @@ const server = createServer(async (req, res) => {
     await page.getByRole('button', { name: 'Сохранить' }).click();
     await page.getByRole('button', { name: 'Тема после правки' }).waitFor();
     await page.getByRole('button', { name: 'Журнал', exact: true }).click();
-    await page.locator('.grid-head[data-lesson="existing-0"]').click();
+    const layoutWidth = () => page.locator('.group-header').evaluate(node => node.getBoundingClientRect().width);
+    const beforeDrawerWidth = await layoutWidth();
+    const lessonHeader = page.locator('.grid-head[data-lesson="existing-0"]');
+    await lessonHeader.click();
     const drawer = page.getByRole('dialog', { name: 'Редактировать занятие' });
     const drawerGeometry = await drawer.evaluate(async node => {
-      const animation = getComputedStyle(node).animationName;
-      await Promise.all(node.getAnimations().map(animation => animation.finished));
+      const animations = node.getAnimations({ subtree: true });
+      const transitions = animations.map(animation => animation.transitionProperty);
+      await Promise.all(animations.map(animation => animation.finished));
       const bounds = node.getBoundingClientRect();
-      return { animation, left: bounds.left, rightGap: innerWidth - bounds.right,
+      return { transitions, left: bounds.left, rightGap: innerWidth - bounds.right,
         top: bounds.top, bottomGap: innerHeight - bounds.bottom };
     });
-    assert.equal(drawerGeometry.animation, 'lesson-drawer-in');
+    assert.ok(drawerGeometry.transitions.includes('transform') && drawerGeometry.transitions.includes('opacity'),
+      JSON.stringify(drawerGeometry));
     assert.ok(drawerGeometry.left > 0 && [drawerGeometry.rightGap, drawerGeometry.top, drawerGeometry.bottomGap]
       .every(gap => Math.abs(gap) <= 1), JSON.stringify(drawerGeometry));
+    assert.equal(await layoutWidth(), beforeDrawerWidth);
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-drawer.png' });
+    await page.mouse.click(15, 300);
+    const drawerElement = page.locator('#dialog');
+    assert.ok(await drawerElement.evaluate(node => {
+      const transitions = node.getAnimations({ subtree: true }).map(animation => animation.transitionProperty);
+      return !node.open && transitions.includes('transform') && transitions.includes('opacity');
+    }));
+    await drawerElement.waitFor({ state: 'hidden' });
+    assert.equal(await layoutWidth(), beforeDrawerWidth);
+    await lessonHeader.click();
     const ivanMark = page.getByLabel('Отметка · Тестов Иван');
     const ivanAttendance = page.getByRole('button', { name: 'Пропуск · Тестов Иван' });
     assert.equal(await ivanMark.inputValue(), '5');
@@ -364,13 +400,15 @@ const server = createServer(async (req, res) => {
       getComputedStyle(node).whiteSpace === 'nowrap' && node.scrollWidth <= node.clientWidth));
     assert.ok(await page.locator('#matrix-scroll').evaluate(node => node.scrollWidth > node.clientWidth));
     if (process.env.JOURNAL_PREVIEW) await page.screenshot({ path: process.env.JOURNAL_PREVIEW + '-mobile.png' });
-    await page.locator('.grid-head[data-lesson="existing-0"]').click();
+    const narrowLayoutWidth = await layoutWidth();
+    await lessonHeader.click();
     assert.ok(await drawer.evaluate(node => {
       const bounds = node.getBoundingClientRect();
       return bounds.left === 0 && bounds.right === innerWidth && bounds.bottom === innerHeight && node.getAnimations().length === 0;
     }));
     assert.ok(await drawer.getByRole('button', { name: 'Сохранить' }).evaluate(button =>
       button.getBoundingClientRect().bottom <= innerHeight));
+    assert.equal(await layoutWidth(), narrowLayoutWidth);
     assert.deepEqual(errors, []);
     console.log('Chromium: вход, курсы, компактный журнал, настройки темы, редакторы, расписание, рулетка, CSV, мобильная ширина.');
   } finally {

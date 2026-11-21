@@ -102,16 +102,21 @@ const server = createServer(async (req, res) => {
     await page.route('**/api', holdSession);
     await page.goto(root + '?code=test-oauth-code&state=' + encodeURIComponent(grant.searchParams.get('state')));
     await page.waitForURL(root + 'mobile/');
-    const loader = page.locator('.mobile-loading .journal-loader');
+    const loader = page.locator('#page-loading .journal-loader');
     await loader.waitFor();
     assert.equal(await loader.locator('.box .side-top').count(), 4);
     assert.equal(await loader.locator('.box-2').evaluate(box => getComputedStyle(box).animationName), 'journal-stack');
+    assert.ok(await loader.evaluate(node => {
+      const bounds = node.parentElement.getBoundingClientRect();
+      return node.getBoundingClientRect().width >= 150 && Math.abs(bounds.left + bounds.width / 2 - innerWidth / 2) <= 1
+        && Math.abs(bounds.top + bounds.height / 2 - innerHeight / 2) <= 1;
+    }));
     releaseSession();
     await page.getByRole('heading', { name: 'Выберите группу' }).waitFor();
     await page.unroute('**/api', holdSession);
     await page.waitForFunction(() => navigator.serviceWorker.controller?.scriptURL.endsWith('/mobile/sw.js'));
     assert.ok(await page.evaluate(async () => Boolean(
-      await caches.match('../loader.js?v=1') && await caches.match('../loader.css?v=1')
+      await caches.match('../loader.js?v=1') && await caches.match('../loader.css?v=2')
     )));
     const appManifest = await (await page.request.get(root + 'mobile/manifest.webmanifest')).json();
     assert.equal(appManifest.display, 'standalone');
